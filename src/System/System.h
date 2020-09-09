@@ -57,18 +57,58 @@ public:
 protected:
     static QState InitialPseudoState(System * const me, QEvt const * const e);
     static QState Root(System * const me, QEvt const * const e);
+        static QState Stopped(System * const me, QEvt const * const e);
+        static QState Starting(System * const me, QEvt const * const e);
+            static QState Prestarting(System * const me, QEvt const * const e);
+            static QState Starting1(System * const me, QEvt const * const e);
+            static QState Starting2(System * const me, QEvt const * const e);
+            static QState Starting3(System * const me, QEvt const * const e);
+        static QState Stopping(System * const me, QEvt const * const e);
+            static QState Stopping1(System * const me, QEvt const * const e);
+            static QState Stopping2(System * const me, QEvt const * const e);
+        static QState Started(System * const me, QEvt const * const e);
+
+
+    uint32_t m_maxIdleCnt;
+    uint32_t m_cpuUtilPercent;      // CPU utilization in percentage.
 
     Timer m_stateTimer;
+    Timer m_idleCntTimer;
     Timer m_testTimer;
 
     enum {
-        STATE_TIMER = TIMER_EVT_START(SYSTEM),
-        TEST_TIMER,
+        IDLE_CNT_INIT_TIMEOUT_MS = 200,
+        IDLE_CNT_POLL_TIMEOUT_MS = 2000,
+    };
+
+
+#define SYSTEM_TIMER_EVT \
+    ADD_EVT(STATE_TIMER) \
+    ADD_EVT(IDLE_CNT_TIMER) \
+    ADD_EVT(TEST_TIMER)
+
+#define SYSTEM_INTERNAL_EVT \
+    ADD_EVT(DONE) \
+    ADD_EVT(NEXT) \
+    ADD_EVT(FAILED)
+
+#undef ADD_EVT
+#define ADD_EVT(e_) e_,
+
+    enum {
+        SYSTEM_TIMER_EVT_START = TIMER_EVT_START(SYSTEM),
+        SYSTEM_TIMER_EVT
     };
 
     enum {
-        DONE = INTERNAL_EVT_START(SYSTEM),
-        RESTART,
+        SYSTEM_INTERNAL_EVT_START = INTERNAL_EVT_START(SYSTEM),
+        SYSTEM_INTERNAL_EVT
+    };
+
+    class Failed : public ErrorEvt {
+    public:
+        Failed(Hsmn hsmn, Error error, Hsmn origin, Reason reason) :
+            ErrorEvt(FAILED, hsmn, hsmn, 0, error, origin, reason) {}
     };
 };
 

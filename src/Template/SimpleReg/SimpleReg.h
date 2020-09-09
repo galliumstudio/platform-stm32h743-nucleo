@@ -62,12 +62,24 @@ protected:
 
     Timer m_stateTimer;
 
+
+#define SIMPLE_REG_TIMER_EVT \
+    ADD_EVT(STATE_TIMER)
+
+#define SIMPLE_REG_INTERNAL_EVT \
+    ADD_EVT(DONE)
+
+#undef ADD_EVT
+#define ADD_EVT(e_) e_,
+
     enum {
-        STATE_TIMER = TIMER_EVT_START(SIMPLE_REG),
+        SIMPLE_REG_TIMER_EVT_START = TIMER_EVT_START(SIMPLE_REG),
+        SIMPLE_REG_TIMER_EVT
     };
 
     enum {
-        DONE = INTERNAL_EVT_START(SIMPLE_REG),
+        SIMPLE_REG_INTERNAL_EVT_START = INTERNAL_EVT_START(SIMPLE_REG),
+        SIMPLE_REG_INTERNAL_EVT
     };
 };
 

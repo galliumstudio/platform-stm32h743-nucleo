@@ -70,7 +70,8 @@ protected:
     static void CleanCache(uint32_t addr, uint32_t len);
 
     UART_HandleTypeDef &m_hal;
-    Hsmn m_client;
+    Hsmn m_manager;     // Managing HSM
+    Hsmn m_client;      // User HSM
     Fifo *m_fifo;
     uint32_t m_writeCount;
     Timer m_activeTimer;

@@ -46,8 +46,18 @@
 #include "stm32h7xx_nucleo_144.h"
 #include "stm32h7xx_it.h"
 
+// Define one of the following platforms.
+#define BOARD_NUCLEO
+//#define BOARD_WAVESHARE
+
 #define BSP_TICKS_PER_SEC            (1000)
 #define BSP_MSEC_PER_TICK            (1000 / BSP_TICKS_PER_SEC)
+#define BSP_MSEC_TO_TICK(ms_)        ((ms_) / BSP_MSEC_PER_TICK)
+
+// Timer tick rates
+#define TICK_RATE_BSP       0       // Timer tick driven by SysTick_Handler() at a rate of BSP_TICKS_PER_SEC.
+#define TICK_RATE_GUIMGR    1       // Timer tick driven by LED_PANEL_SYNC_IND in GuiMgr. This is to ensure frame buffer update is in sync with
+                                    // LedPanel frame refresh rate so that scrolling is smooth.
 
 enum KernelUnawareISRs { // see NOTE00
     // ...
@@ -58,14 +68,22 @@ Q_ASSERT_COMPILE(MAX_KERNEL_UNAWARE_CMSIS_PRI <= QF_AWARE_ISR_CMSIS_PRI);
 
 // Lower numerical value indicates higher priority.
 enum KernelAwareISRs {
-    SYSTICK_PRIO            = QF_AWARE_ISR_CMSIS_PRI,
-    DMA2_STREAM6_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 1,   // USART6 TX DMA
-    DMA2_STREAM1_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 1,   // USART6 RX DMA
-    DMA1_STREAM3_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 1,   // USART1 TX DMA
-    DMA1_STREAM1_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 1,   // USART1 RX DMA
-    USART6_IRQ_PRIO         = QF_AWARE_ISR_CMSIS_PRI + 1,   // USART6 IRQ
-    USART3_IRQ_PRIO         = QF_AWARE_ISR_CMSIS_PRI + 1,   // USART3 IRQ
-    EXTI0_1_PRIO            = QF_AWARE_ISR_CMSIS_PRI + 10,
+    SYSTICK_PRIO            = QF_AWARE_ISR_CMSIS_PRI + 1,   // SW timer (2nd highest, was QF_AWARE_ISR_CMSIS_PRI)
+    DMA2_STREAM6_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 2,   // USART6 TX DMA
+    DMA2_STREAM1_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 2,   // USART6 RX DMA
+    DMA1_STREAM3_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 2,   // USART1 TX DMA
+    DMA1_STREAM1_PRIO       = QF_AWARE_ISR_CMSIS_PRI + 2,   // USART1 RX DMA
+    USART6_IRQ_PRIO         = QF_AWARE_ISR_CMSIS_PRI + 2,   // USART6 IRQ
+    USART3_IRQ_PRIO         = QF_AWARE_ISR_CMSIS_PRI + 2,   // USART3 IRQ
+    TIM15_IRQ_PRIO          = QF_AWARE_ISR_CMSIS_PRI,       // TIM9 IRQ (Enable/Slot timer for LedPanel0 and LedPanel1. Highest.)
+    EXTI0_PRIO              = QF_AWARE_ISR_CMSIS_PRI + 10,
+    EXTI1_PRIO              = QF_AWARE_ISR_CMSIS_PRI + 10,
+    EXTI2_PRIO              = QF_AWARE_ISR_CMSIS_PRI + 10,
+    EXTI3_PRIO              = QF_AWARE_ISR_CMSIS_PRI + 10,
+    EXTI4_PRIO              = QF_AWARE_ISR_CMSIS_PRI + 10,
+    EXTI9_5_PRIO            = QF_AWARE_ISR_CMSIS_PRI + 10,
+    EXTI15_10_PRIO          = QF_AWARE_ISR_CMSIS_PRI + 10,
+
     // ...
     MAX_KERNEL_AWARE_CMSIS_PRI // keep always last
 };
@@ -74,6 +92,9 @@ Q_ASSERT_COMPILE(MAX_KERNEL_AWARE_CMSIS_PRI <= (0xFF >>(8-__NVIC_PRIO_BITS)));
 
 void BspInit();
 void BspWrite(char const *buf, uint32_t len);
-uint32_t GetSystemMs();
+// Use C linkage as it is required by C-based emwin library.
+extern "C" uint32_t GetSystemMs();
+extern "C" void DelayMs(uint32_t ms);
+uint32_t GetIdleCnt();
 
 #endif // BSP_H

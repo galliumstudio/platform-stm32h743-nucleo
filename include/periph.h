@@ -83,6 +83,11 @@ public:
         return hal;
     }
 
+    // Helper functions for TIM clock enabing/disabling.
+    static void EnableTimClk(TIM_TypeDef *tim);
+    static void DisableTimClk(TIM_TypeDef *tim);
+    static uint32_t GetTimFreq(TIM_TypeDef *tim);
+
 private:
     enum {
         MAX_TIM_COUNT = 10     // Maximum HW timers supported. Can increase.
@@ -93,6 +98,7 @@ private:
     // Persistent HAL handle objects.
     static TIM_HandleTypeDef m_tim1Hal;
     static TIM_HandleTypeDef m_tim2Hal;
+    static TIM_HandleTypeDef m_tim3Hal;
     // Add more HAL handles here.
 };
 

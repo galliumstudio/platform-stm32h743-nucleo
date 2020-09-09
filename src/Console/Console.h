@@ -52,6 +52,8 @@
 using namespace QP;
 using namespace FW;
 
+#define CONSOLE_ASSERT(t_) ((t_) ? (void)0 : Q_onAssert("Console.h", (int_t)__LINE__))
+
 namespace APP {
 
 class Console : public Active {
@@ -62,6 +64,9 @@ public:
 
     Console(Hsmn hsmn, char const *name, char const *cmdInputName, char const *cmdParserName);
 
+    // Helper functions for use by console commands.
+    Hsmn GetOutIfHsmn() const { return m_outIfHsmn; }
+    Fifo &GetInFifo() { return m_inFifo; }
     uint32_t PutChar(char c);
     uint32_t PutCharN(char c, uint32_t count);
     uint32_t PutStr(char const *str);
@@ -69,11 +74,13 @@ public:
     uint32_t Print(char const *format, ...);
     uint32_t PrintItem(uint32_t index, uint32_t minWidth, uint32_t itemPerLine, char const *format, ...);
     uint32_t PrintEvent(QP::QEvt const *e);
+    uint32_t PrintErrorEvt(ErrorEvt const *e);
     uint32_t PrintBufLine(uint8_t const *lineBuf, uint32_t lineLen, uint8_t unit, uint32_t lineLabel);
     uint32_t PrintBuf(uint8_t const *dataBuf, uint32_t dataLen, uint8_t align = 1, uint32_t label = 0);
     CmdStatus HandleCmd(Evt const *e, CmdHandler const *cmd, uint32_t cmdCount, bool isRoot = false);
     CmdStatus ListCmd(Evt const *e, CmdHandler const *cmd, uint32_t cmdCount);
     uint32_t &Var(uint32_t index);
+    Timer &GetTimer() { return m_consoleTimer; }
 
 protected:
     static QState InitialPseudoState(Console * const me, QEvt const * const e);
@@ -85,14 +92,13 @@ protected:
             static QState Login(Console * const me, QEvt const * const e);
             static QState Interactive(Console * const me, QEvt const * const e);
             static QState Raw(Console * const me, QEvt const * const e);
-                static QState RawNormal(Console * const me, QEvt const * const e);
-                static QState RawFull(Console * const me, QEvt const * const e);
 
     bool IsUart() { return (m_ifHsmn >= UART_ACT) && (m_ifHsmn  <= UART_ACT_LAST); }
     // Add other interface type check here.
     void Banner();
     void Prompt();
     CmdStatus RunCmd(char const **argv, uint32_t argc, CmdHandler const *cmd, uint32_t cmdCount);
+    void LastCmdDone();
     void RootCmdFunc(Evt const *e);
     void LastCmdFunc(Evt const *e);
     void ClearVar() { memset(m_var, 0, sizeof(m_var)); }
@@ -105,13 +111,11 @@ protected:
     CmdParser m_cmdParser;  // Region to parse command line.
 
     enum {
-        OUT_FIFO_ORDER = 12,
-        IN_FIFO_ORDER = 10,
         MAX_ARGC = 8,
         MAX_VAR = 8,
     };
-    uint8_t m_outFifoStor[1 << OUT_FIFO_ORDER];
-    uint8_t m_inFifoStor[1 << IN_FIFO_ORDER];
+
+    // FIFO storage is defined in cpp to allow custom memory location.
     Fifo m_outFifo;
     Fifo m_inFifo;
     char m_cmdStr[CmdInput::MAX_LEN];
@@ -122,15 +126,21 @@ protected:
     uint32_t m_var[MAX_VAR];
 
     Timer m_stateTimer;
+    Timer m_consoleTimer;       // General timer for command handlers.
 
+public:
+    // Timer and internal events are public for use by command handlers which are not member functions of Console.
     enum {
         STATE_TIMER = TIMER_EVT_START(CONSOLE),
+        CONSOLE_TIMER,          // General timeout event for command handlers.
     };
 
     enum {
         DONE = INTERNAL_EVT_START(CONSOLE),
         FAILED,
         CMD_RECV,
+        RAW_DISABLE,
+        CONSOLE_CMD,            // Sent to command handlers to indicate the execution of a new command.
     };
 
     class Failed : public ErrorEvt {
@@ -138,6 +148,19 @@ protected:
         Failed(Hsmn hsmn, Error error, Hsmn origin, Reason reason) :
             ErrorEvt(FAILED, hsmn, hsmn, 0, error, origin, reason) {}
     };
+
+    class ConsoleCmd: public Evt {
+    public:
+        ConsoleCmd(Hsmn hsmn, char const **argv, uint32_t argc) :
+            Evt(CONSOLE_CMD, hsmn, hsmn), m_argv(argv), m_argc(argc) {}
+        char const **Argv() const { return m_argv; }
+        char const *Argv(uint32_t index) const { CONSOLE_ASSERT(index < m_argc); return m_argv[index]; }
+        uint32_t Argc() const { return m_argc; }
+    private:
+        char const **m_argv;
+        uint32_t m_argc;
+    };
+
 };
 
 } // namespace APP

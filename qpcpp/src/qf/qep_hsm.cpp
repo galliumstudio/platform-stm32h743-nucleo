@@ -3,14 +3,14 @@
 /// @ingroup qep
 /// @cond
 ///***************************************************************************
-/// Last updated for version 5.9.0
-/// Last updated on  2017-05-08
+/// Last updated for version 6.5.0
+/// Last updated on  2019-03-09
 ///
-///                    Q u a n t u m     L e a P s
-///                    ---------------------------
-///                    innovating embedded systems
+///                    Q u a n t u m  L e a P s
+///                    ------------------------
+///                    Modern Embedded Software
 ///
-/// Copyright (C) Quantum Leaps, LLC. All rights reserved.
+/// Copyright (C) 2005-2019 Quantum Leaps. All rights reserved.
 ///
 /// This program is open source software: you can redistribute it and/or
 /// modify it under the terms of the GNU General Public License as published
@@ -31,7 +31,7 @@
 /// along with this program. If not, see <http://www.gnu.org/licenses/>.
 ///
 /// Contact information:
-/// https://state-machine.com
+/// https://www.state-machine.com
 /// mailto:info@state-machine.com
 ///***************************************************************************
 /// @endcond
@@ -76,6 +76,9 @@ namespace QP {
 Q_DEFINE_THIS_MODULE("qep_hsm")
 
 //****************************************************************************
+char_t const versionStr[7] = QP_VERSION_STR;
+
+//****************************************************************************
 enum {
     QEP_EMPTY_SIG_ = 0 //!< empty signal for internal use only
 };
@@ -115,7 +118,7 @@ static QEvt const QEP_reservedEvt_[4] = {
 ///
 QHsm::QHsm(QStateHandler const initial) {
     m_state.fun = Q_STATE_CAST(&top);
-    m_temp.fun = initial;
+    m_temp.fun  = initial;
 }
 
 //****************************************************************************
@@ -131,14 +134,15 @@ QHsm::~QHsm() {
 ///
 /// @param[in] e  pointer to the initialization event (might be NULL)
 ///
-/// @note Must be called exactly __once__ before the QP::QHsm::dispatch().
+/// @note
+/// Must be called exactly __once__ before the QP::QHsm::dispatch().
 ///
 void QHsm::init(QEvt const * const e) {
     QStateHandler t = m_state.fun;
 
     /// @pre ctor must have been executed and initial tran NOT taken
     Q_REQUIRE_ID(200, (m_temp.fun != Q_STATE_CAST(0))
-                      && (t == Q_STATE_CAST(&QHsm::top)));
+                      && (t == Q_STATE_CAST(&top)));
 
     // execute the top-most initial transition
     QState r = (*m_temp.fun)(this, e);
@@ -208,8 +212,9 @@ void QHsm::init(QEvt const * const e) {
 ///
 /// @param[in] e  pointer to the event to be dispatched to the HSM
 ///
-/// @returns Always returns #Q_RET_IGNORED, which means that the top state
-///          ignores all events.
+/// @returns
+/// Always returns #Q_RET_IGNORED, which means that the top state ignores
+/// all events.
 ///
 /// @note
 /// The arguments to this state handler are not used. They are provided for
@@ -386,7 +391,8 @@ void QHsm::dispatch(QEvt const * const e) {
 /// @param[in,out] path array of pointers to state-handler functions
 ///                     to execute the entry actions
 ///
-/// @returns the depth of the entry path stored in the @p path parameter.
+/// @returns
+/// the depth of the entry path stored in the @p path parameter.
 ////
 int_fast8_t QHsm::hsm_tran(QStateHandler (&path)[MAX_NEST_DEPTH_]) {
     // transition entry path index
@@ -446,7 +452,7 @@ int_fast8_t QHsm::hsm_tran(QStateHandler (&path)[MAX_NEST_DEPTH_]) {
 
                             // entry path must not overflow
                             Q_ASSERT_ID(510,
-                              ip < static_cast<int_fast8_t>(MAX_NEST_DEPTH_));
+                                ip < static_cast<int_fast8_t>(MAX_NEST_DEPTH_));
                             --ip;  // do not enter the source
                             r = Q_RET_HANDLED; // terminate the loop
                         }
@@ -539,7 +545,8 @@ int_fast8_t QHsm::hsm_tran(QStateHandler (&path)[MAX_NEST_DEPTH_]) {
 ///
 /// @param[in] state pointer to the state-handler function to be tested
 ///
-/// @returns 'true' if the HSM is in the @p state and 'false' otherwise
+/// @returns
+/// 'true' if the HSM is in the @p state and 'false' otherwise
 ///
 bool QHsm::isIn(QStateHandler const s) {
 
@@ -575,16 +582,18 @@ bool QHsm::isIn(QStateHandler const s) {
 ///
 /// @param[in] parent pointer to the state-handler function
 ///
-/// @returns the child of a given @c parent state, which is an ancestor of
-/// the currently active state
+/// @returns
+/// the child of a given @c parent state, which is an ancestor of the
+/// currently active state
 ///
-/// @note this function is designed to be called during state transitions,
-/// so it does not necessarily start in a stable state configuration.
+/// @note
+/// this function is designed to be called during state transitions, so it
+/// does not necessarily start in a stable state configuration.
 /// However, the function establishes stable state configuration upon exit.
 ///
 QStateHandler QHsm::childState(QStateHandler const parent) {
     QStateHandler child = m_state.fun; // start with the current state
-    bool isConfirmed = false; // start with the child not confirmed
+    bool isFound = false; // start with the child not found
     QState r;
 
     // establish stable state configuration
@@ -592,7 +601,7 @@ QStateHandler QHsm::childState(QStateHandler const parent) {
     do {
         // is this the parent of the current child?
         if (m_temp.fun == parent) {
-            isConfirmed = true; // child is confirmed
+            isFound = true; // child is found
             r = Q_RET_IGNORED;  // cause breaking out of the loop
         }
         else {
@@ -603,9 +612,13 @@ QStateHandler QHsm::childState(QStateHandler const parent) {
     m_temp.fun = m_state.fun; // establish stable state configuration
 
     /// @post the child must be confirmed
-    Q_ENSURE_ID(710, isConfirmed);
+    Q_ENSURE_ID(810, isFound);
+#ifdef Q_NASSERT
+    (void)isFound; // avoid compiler warning about unused variable
+#endif
 
     return child; // return the child
 }
 
 } // namespace QP
+

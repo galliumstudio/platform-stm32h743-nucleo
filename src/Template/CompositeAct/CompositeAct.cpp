@@ -47,28 +47,29 @@ FW_DEFINE_THIS_FILE("CompositeAct.cpp")
 
 namespace APP {
 
+#undef ADD_EVT
+#define ADD_EVT(e_) #e_,
+
 static char const * const timerEvtName[] = {
-    "STATE_TIMER",
+    "COMPOSITE_ACT_TIMER_EVT_START",
+    COMPOSITE_ACT_TIMER_EVT
 };
 
 static char const * const internalEvtName[] = {
-    "DONE",
-    "FAILED",
+    "COMPOSITE_ACT_INTERNAL_EVT_START",
+    COMPOSITE_ACT_INTERNAL_EVT
 };
 
 static char const * const interfaceEvtName[] = {
-    "COMPOSITE_ACT_START_REQ",
-    "COMPOSITE_ACT_START_CFM",
-    "COMPOSITE_ACT_STOP_REQ",
-    "COMPOSITE_ACT_STOP_CFM",
+    "COMPOSITE_ACT_INTERFACE_EVT_START",
+    COMPOSITE_ACT_INTERFACE_EVT
 };
 
 CompositeAct::CompositeAct() :
-    Active((QStateHandler)&CompositeAct::InitialPseudoState, COMPOSITE_ACT, "COMPOSITE_ACT",
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
-    m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER) {}
+    Active((QStateHandler)&CompositeAct::InitialPseudoState, COMPOSITE_ACT, "COMPOSITE_ACT"),
+    m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER) {
+    SET_EVT_NAME(COMPOSITE_ACT);
+}
 
 QState CompositeAct::InitialPseudoState(CompositeAct * const me, QEvt const * const e) {
     (void)e;

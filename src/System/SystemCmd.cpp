@@ -39,7 +39,10 @@
 #include <string.h>
 #include "fw_log.h"
 #include "fw_assert.h"
+#include "app_hsmn.h"
 #include "Console.h"
+#include "SystemCmd.h"
+#include "SystemInterface.h"
 
 FW_DEFINE_THIS_FILE("SystemCmd.cpp")
 
@@ -47,8 +50,60 @@ namespace APP {
 
 static CmdStatus Test(Console &console, Evt const *e) {
     switch (e->sig) {
-        case CONSOLE_CMD_IND: {
+        case Console::CONSOLE_CMD: {
             console.PutStr("SystemCmd Test\n\r");
+            break;
+        }
+    }
+    return CMD_DONE;
+}
+
+static CmdStatus Start(Console &console, Evt const *e) {
+    switch (e->sig) {
+        case Console::CONSOLE_CMD: {
+            console.PutStr("Starting SYSTEM\n\r");
+            Evt *evt = new SystemStartReq(SYSTEM, console.GetHsmn(), 0);
+            Fw::Post(evt);
+            break;
+        }
+        case SYSTEM_START_CFM: {
+            ErrorEvt const &cfm = ERROR_EVT_CAST(*e);
+            console.PrintErrorEvt(&cfm);
+        	return CMD_DONE;
+        }
+    }
+    return CMD_CONTINUE;
+}
+
+
+static CmdStatus Stop(Console &console, Evt const *e) {
+    switch (e->sig) {
+        case Console::CONSOLE_CMD: {
+            console.PutStr("Stopping SYSTEM\n\r");
+            Evt *evt = new SystemStopReq(SYSTEM, console.GetHsmn(), 0);
+            Fw::Post(evt);
+            break;
+        }
+        case SYSTEM_STOP_CFM: {
+            ErrorEvt const &cfm = ERROR_EVT_CAST(*e);
+            console.PrintErrorEvt(&cfm);
+        	return CMD_DONE;
+        }
+    }
+    return CMD_CONTINUE;
+}
+
+static CmdStatus Cpu(Console &console, Evt const *e) {
+    switch (e->sig) {
+        case Console::CONSOLE_CMD: {
+            Console::ConsoleCmd const &ind = static_cast<Console::ConsoleCmd const &>(*e);
+            if (ind.Argc() < 2) {
+                console.Print("on - enable, off - disable\n\r");
+                break;
+            }
+            bool enable = STRING_EQUAL(ind.Argv(1), "on");
+            Evt *evt = new SystemCpuUtilReq(SYSTEM, console.GetHsmn(), 0, enable);
+            Fw::Post(evt);
             break;
         }
     }
@@ -59,6 +114,9 @@ static CmdStatus List(Console &console, Evt const *e);
 static CmdHandler const cmdHandler[] = {
     { "test",       Test,       "Test function", 0 },
     { "?",          List,       "List commands", 0 },
+    { "stop",       Stop,       "Stop HSM", 0 },
+    { "start",      Start,      "Start HSM", 0 },
+    { "cpu",        Cpu,        "Report CPU util", 0 },
 };
 
 static CmdStatus List(Console &console, Evt const *e) {

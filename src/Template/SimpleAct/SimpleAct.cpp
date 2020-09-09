@@ -46,28 +46,29 @@ FW_DEFINE_THIS_FILE("SimpleAct.cpp")
 
 namespace APP {
 
+#undef ADD_EVT
+#define ADD_EVT(e_) #e_,
+
 static char const * const timerEvtName[] = {
-    "STATE_TIMER",
+    "SIMPLE_ACT_TIMER_EVT_START",
+    SIMPLE_ACT_TIMER_EVT
 };
 
 static char const * const internalEvtName[] = {
-    "DONE",
-    "FAILED",
+    "SIMPLE_ACT_INTERNAL_EVT_START",
+    SIMPLE_ACT_INTERNAL_EVT
 };
 
 static char const * const interfaceEvtName[] = {
-    "SIMPLE_ACT_START_REQ",
-    "SIMPLE_ACT_START_CFM",
-    "SIMPLE_ACT_STOP_REQ",
-    "SIMPLE_ACT_STOP_CFM",
+    "SIMPLE_ACT_INTERFACE_EVT_START",
+    SIMPLE_ACT_INTERFACE_EVT
 };
 
 SimpleAct::SimpleAct() :
-    Active((QStateHandler)&SimpleAct::InitialPseudoState, SIMPLE_ACT, "SIMPLE_ACT",
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
-    m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER) {}
+    Active((QStateHandler)&SimpleAct::InitialPseudoState, SIMPLE_ACT, "SIMPLE_ACT"),
+    m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER) {
+    SET_EVT_NAME(SIMPLE_ACT);
+}
 
 QState SimpleAct::InitialPseudoState(SimpleAct * const me, QEvt const * const e) {
     (void)e;

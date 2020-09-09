@@ -64,13 +64,24 @@ protected:
 
     Timer m_stateTimer;
 
+#define SIMPLE_ACT_TIMER_EVT \
+    ADD_EVT(STATE_TIMER)
+
+#define SIMPLE_ACT_INTERNAL_EVT \
+    ADD_EVT(DONE) \
+    ADD_EVT(FAILED)
+
+#undef ADD_EVT
+#define ADD_EVT(e_) e_,
+
     enum {
-        STATE_TIMER = TIMER_EVT_START(SIMPLE_ACT),
+        SIMPLE_ACT_TIMER_EVT_START = TIMER_EVT_START(SIMPLE_ACT),
+        SIMPLE_ACT_TIMER_EVT
     };
 
     enum {
-        DONE = INTERNAL_EVT_START(SIMPLE_ACT),
-        FAILED,
+        SIMPLE_ACT_INTERNAL_EVT_START = INTERNAL_EVT_START(SIMPLE_ACT),
+        SIMPLE_ACT_INTERNAL_EVT
     };
 
     class Failed : public ErrorEvt {

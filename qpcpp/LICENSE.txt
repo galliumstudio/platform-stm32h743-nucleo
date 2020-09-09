@@ -46,5 +46,5 @@ https://state-machine.com/licensing/
 
 Contact information:
 ====================
-https://state-machine.com
+https://www.state-machine.com
 mailto:info@state-machine.com

@@ -71,8 +71,8 @@ valign=top
     <panel_attributes>Started
 --
 entry/ Log::Addinterface(outIfHsmn, &amp;outFifo),
-       dispatch(CMD_INPUT_START_REQ), 
-       Banner()
+       dispatch(CMD_INPUT_START_REQ), Banner(),
+       clear lastCmdFunc, Prompt()
 exit/ Log::RemoveInterface(outIfHsm)
 
 UART_IN_DATA_IND
@@ -82,6 +82,13 @@ UART_IN_DATA_IND
       ^^CMD_RECV, break       
   if (inFifo.GetUsedCount())
     ^UART_IN_DATA_IND
+
+Any interface events
+[(sig != CONSOLE_START_REQ) &amp;&amp; (sig != CONSOLE_STOP_REQ) &amp;&amp;
+ (sig != UART_IN_DATA_IND)]
+/ if (lastCmdFunc)
+    if (lastCmdFunc(e) == CMD_DONE)
+      clear lastCmdFunc, consoleTimer.Stop(), Prompt()
 valign=top
 </panel_attributes>
     <additional_attributes/>
@@ -275,19 +282,19 @@ style=wordwrap</panel_attributes>
   <element>
     <id>Text</id>
     <coordinates>
-      <x>504</x>
-      <y>648</y>
-      <w>324</w>
-      <h>48</h>
+      <x>840</x>
+      <y>1224</y>
+      <w>204</w>
+      <h>36</h>
     </coordinates>
-    <panel_attributes>DONE/ ^CONSOLE_START_CFM(SUCCESS)
+    <panel_attributes>CONSOLE_RAW_ENABLE_REQ
 style=wordwrap</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>Text</id>
     <coordinates>
-      <x>1092</x>
+      <x>1116</x>
       <y>648</y>
       <w>288</w>
       <h>36</h>
@@ -326,25 +333,17 @@ valign=top
     <id>UMLState</id>
     <coordinates>
       <x>156</x>
-      <y>1020</y>
-      <w>672</w>
-      <h>432</h>
+      <y>1152</y>
+      <w>600</w>
+      <h>300</h>
     </coordinates>
     <panel_attributes>Interactive
 --
-entry/ clear lastCmdFunc, Prompt()
 CMD_RECV
 / cmdStr = cmdInput.GetCmd(),
   dispatch(CMD_PARSER_START_REQ(cmdStr)),
   if (rootCmdFunc(CONSOLE_CMD_IND(argv, argc)) == CMD_DONE)
-    clear lastCmdFunc, Prompt()
-
-Any interface events
-[(sig != CONSOLE_START_REQ) &amp;&amp; (sig != CONSOLE_STOP_REQ) &amp;&amp;
- (sig != UART_IN_DATA_IND)]
-/ if (lastCmdFunc)
-    if (lastCmdFunc(e) == CMD_DONE)
-      clear lastCmdFunc, Prompt()
+    clear lastCmdFunc, consoleTimer.Stop(), Prompt()
 valign=top
 </panel_attributes>
     <additional_attributes/>
@@ -352,14 +351,19 @@ valign=top
   <element>
     <id>UMLState</id>
     <coordinates>
-      <x>1068</x>
-      <y>1020</y>
-      <w>636</w>
-      <h>432</h>
+      <x>1128</x>
+      <y>1152</y>
+      <w>576</w>
+      <h>300</h>
     </coordinates>
     <panel_attributes>Raw
 --
-    
+UART_IN_DATA_IND
+/ if (lastCmdFunc)
+    if (lastCmdFunc(e) == CMD_DONE)
+      clear lastCmdFunc, Prompt()
+  if (!lastCmdFunc)
+    ^^RAW_DISABLE
 valign=top
 </panel_attributes>
     <additional_attributes/>
@@ -367,75 +371,69 @@ valign=top
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>348</x>
-      <y>972</y>
-      <w>156</w>
-      <h>72</h>
+      <x>396</x>
+      <y>1092</y>
+      <w>108</w>
+      <h>84</h>
     </coordinates>
     <panel_attributes>lt=-&gt;&gt;&gt;</panel_attributes>
-    <additional_attributes>10.0;10.0;110.0;10.0;110.0;40.0</additional_attributes>
+    <additional_attributes>10.0;10.0;70.0;10.0;70.0;50.0</additional_attributes>
   </element>
   <element>
     <id>UMLSpecialState</id>
     <coordinates>
-      <x>336</x>
-      <y>972</y>
+      <x>384</x>
+      <y>1092</y>
       <w>24</w>
       <h>24</h>
     </coordinates>
     <panel_attributes>type=initial</panel_attributes>
-    <additional_attributes/>
-  </element>
-  <element>
-    <id>UMLState</id>
-    <coordinates>
-      <x>1140</x>
-      <y>1104</y>
-      <w>492</w>
-      <h>108</h>
-    </coordinates>
-    <panel_attributes>RawNormal
---
-    
-valign=top
-</panel_attributes>
-    <additional_attributes/>
-  </element>
-  <element>
-    <id>UMLState</id>
-    <coordinates>
-      <x>1140</x>
-      <y>1308</y>
-      <w>492</w>
-      <h>108</h>
-    </coordinates>
-    <panel_attributes>RawFull
---
-    
-valign=top
-</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>1248</x>
-      <y>1056</y>
-      <w>156</w>
-      <h>72</h>
+      <x>744</x>
+      <y>1248</y>
+      <w>408</w>
+      <h>36</h>
     </coordinates>
     <panel_attributes>lt=-&gt;&gt;&gt;</panel_attributes>
-    <additional_attributes>10.0;10.0;110.0;10.0;110.0;40.0</additional_attributes>
+    <additional_attributes>10.0;10.0;320.0;10.0</additional_attributes>
   </element>
   <element>
-    <id>UMLSpecialState</id>
+    <id>Text</id>
     <coordinates>
-      <x>1236</x>
-      <y>1056</y>
-      <w>24</w>
-      <h>24</h>
+      <x>516</x>
+      <y>648</y>
+      <w>324</w>
+      <h>48</h>
     </coordinates>
-    <panel_attributes>type=initial</panel_attributes>
+    <panel_attributes>DONE/ ^CONSOLE_START_CFM(SUCCESS)
+style=wordwrap</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>744</x>
+      <y>1344</y>
+      <w>408</w>
+      <h>36</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;&gt;&gt;</panel_attributes>
+    <additional_attributes>320.0;10.0;10.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Text</id>
+    <coordinates>
+      <x>876</x>
+      <y>1320</y>
+      <w>108</w>
+      <h>36</h>
+    </coordinates>
+    <panel_attributes>RAW_DISABLE
+style=wordwrap</panel_attributes>
     <additional_attributes/>
   </element>
 </diagram>

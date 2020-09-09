@@ -46,19 +46,22 @@ FW_DEFINE_THIS_FILE("CompositeReg.cpp")
 
 namespace APP {
 
+#undef ADD_EVT
+#define ADD_EVT(e_) #e_,
+
 static char const * const timerEvtName[] = {
-    "STATE_TIMER",
+    "COMPOSITE_REG_TIMER_EVT_START",
+    COMPOSITE_REG_TIMER_EVT
 };
 
 static char const * const internalEvtName[] = {
-    "DONE",
+    "COMPOSITE_REG_INTERNAL_EVT_START",
+    COMPOSITE_REG_INTERNAL_EVT
 };
 
 static char const * const interfaceEvtName[] = {
-    "COMPOSITE_REG_START_REQ",
-    "COMPOSITE_REG_START_CFM",
-    "COMPOSITE_REG_STOP_REQ",
-    "COMPOSITE_REG_STOP_CFM",
+    "COMPOSITE_REG_INTERFACE_EVT_START",
+    COMPOSITE_REG_INTERFACE_EVT
 };
 
 static char const * const hsmName[] = {
@@ -93,11 +96,9 @@ static uint16_t GetInst(Hsmn hsmn) {
 }
 
 CompositeReg::CompositeReg() :
-    Region((QStateHandler)&CompositeReg::InitialPseudoState, GetCurrHsmn(), GetName(GetCurrHsmn()),
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
+    Region((QStateHandler)&CompositeReg::InitialPseudoState, GetCurrHsmn(), GetName(GetCurrHsmn())),
     m_stateTimer(this->GetHsm().GetHsmn(), STATE_TIMER) {
+    SET_EVT_NAME(COMPOSITE_REG);
     IncCurrHsmn();
 }
 

@@ -37,6 +37,7 @@
  ******************************************************************************/
 
 #include <stdarg.h>
+#include <stdio.h>
 #include "app_hsmn.h"
 #include "fw_log.h"
 #include "fw_assert.h"
@@ -61,6 +62,7 @@ static char const * const internalEvtName[] = {
     "DONE",
     "FAILED",
     "CMD_RECV",
+    "RAW_DISABLE",
 };
 
 static char const * const interfaceEvtName[] = {
@@ -69,7 +71,31 @@ static char const * const interfaceEvtName[] = {
     "CONSOLE_STOP_REQ",
     "CONSOLE_STOP_CFM",
     "CONSOLE_CMD_IND",
+    "CONSOLE_RAW_ENABLE_REQ",
 };
+
+enum {
+    OUT_FIFO_ORDER = 13,
+    IN_FIFO_ORDER = 10,
+};
+
+// UART buffers can be allocated to TCM by uncommenting the section __attribute__ below. (Note TCM is limited to 128K.)
+// Make sure the beginning and end of the buffers are aligned to cache line size (32 bytes).
+// (Not strictly required for output buffer; Only required for input buffer that needs invalidation.)
+uint8_t consoleOutFifoStor[CONSOLE_COUNT][ROUND_UP_32(1 << OUT_FIFO_ORDER)] __attribute__((aligned(32))); // __attribute__ ((section (".data.DTCM")));
+uint8_t consoleInFifoStor[CONSOLE_COUNT][ROUND_UP_32(1 << IN_FIFO_ORDER)] __attribute__((aligned(32)));   // __attribute__ ((section (".data.DTCM")));
+
+static uint8_t *GetOutFifoStor(Hsmn hsmn) {
+    uint16_t inst = hsmn - CONSOLE;
+    FW_ASSERT(inst < ARRAY_COUNT(consoleOutFifoStor));
+    return consoleOutFifoStor[inst];
+}
+
+static uint8_t *GetInFifoStor(Hsmn hsmn) {
+    uint16_t inst = hsmn - CONSOLE;
+    FW_ASSERT(inst < ARRAY_COUNT(consoleInFifoStor));
+    return consoleInFifoStor[inst];
+}
 
 uint16_t Console::GetInst(Hsmn hsmn) {
     uint16_t inst = hsmn - CONSOLE;
@@ -116,14 +142,20 @@ uint32_t Console::PrintItem(uint32_t index, uint32_t minWidth, uint32_t itemPerL
 uint32_t Console::PrintEvent(QP::QEvt const *e) {
     if (IS_EVT_HSMN_VALID(e->sig) && !IS_TIMER_EVT(e->sig)) {
         Evt const *evt = static_cast<Evt const *>(e);
-        Hsmn to = evt->GetTo();
         Hsmn from = evt->GetFrom();
-        return Log::Print(m_outIfHsmn, "%lu %s to %s(%d) from %s(%d) seq=%d\n\r",
-                          GetSystemMs(), Log::GetEvtName(e->sig), Log::GetHsmName(to), to,
-                          Log::GetHsmName(from), from, evt->GetSeq());
+        return Log::Print(m_outIfHsmn, "%lu Received %s from %s(%d) seq=%d\n\r",
+                          GetSystemMs(), Log::GetEvtName(e->sig), Log::GetHsmName(from), from, evt->GetSeq());
     } else {
-        return Log::Print(m_outIfHsmn, "%lu %s\n\r", GetSystemMs(), Log::GetEvtName(e->sig));
+        return Log::Print(m_outIfHsmn, "%lu Received %s\n\r", GetSystemMs(), Log::GetEvtName(e->sig));
     }
+}
+
+uint32_t Console::PrintErrorEvt(ErrorEvt const *e) {
+    Hsmn from = e->GetFrom();
+    Hsmn origin = e->GetOrigin();
+    return Log::Print(m_outIfHsmn, "%lu Received %s from %s(%d) seq=%u error=%u origin=%s(%u) reason=%u\n\r",
+                      GetSystemMs(), Log::GetEvtName(e->sig), Log::GetHsmName(from), from, e->GetSeq(),
+                      e->GetError(), Log::GetHsmName(origin), origin, e->GetReason());
 }
 
 // Returns length of formatted string written, which can be > lineLen due to formatting.
@@ -147,8 +179,8 @@ CmdStatus Console::HandleCmd(Evt const *e, CmdHandler const *cmd, uint32_t cmdCo
     FW_ASSERT(e && cmd && cmdCount);
     CmdStatus status = CMD_DONE;
     switch (e->sig) {
-        case CONSOLE_CMD_IND: {
-            ConsoleCmdInd const &ind = static_cast<ConsoleCmdInd const &>(*e);
+        case CONSOLE_CMD: {
+            ConsoleCmd const &ind = static_cast<ConsoleCmd const &>(*e);
             uint32_t skip = isRoot ? 0 : 1;
             if (ind.Argc() > skip) {
                 status = RunCmd(ind.Argv() + skip, ind.Argc() - skip, cmd, cmdCount);
@@ -163,7 +195,7 @@ CmdStatus Console::HandleCmd(Evt const *e, CmdHandler const *cmd, uint32_t cmdCo
 CmdStatus Console::ListCmd(Evt const *e, CmdHandler const *cmd, uint32_t cmdCount) {
     uint32_t &index = Var(0);
     switch (e->sig) {
-        case CONSOLE_CMD_IND: {
+        case CONSOLE_CMD: {
             PutStr("[Commands]\n\r");
             index = 0;
             return CMD_CONTINUE;
@@ -180,7 +212,7 @@ CmdStatus Console::ListCmd(Evt const *e, CmdHandler const *cmd, uint32_t cmdCoun
             return CMD_DONE;
         }
     }
-    return CMD_DONE;
+    return CMD_CONTINUE;
 }
 
 uint32_t &Console::Var(uint32_t index) {
@@ -190,9 +222,9 @@ uint32_t &Console::Var(uint32_t index) {
 
 void Console::Banner() {
     PutStr("\n\r\n\r");
-    PutStr("***************\n\r");
-    PutStr("*   Console   *\n\r");
-    PutStr("***************\n\r");
+    PutStr("*******************************\n\r");
+    PutStr("*   Console STM32H743 Disco   *\n\r");
+    PutStr("*******************************\n\r");
 }
 
 void Console::Prompt() {
@@ -205,44 +237,50 @@ CmdStatus Console::RunCmd(char const **argv, uint32_t argc, CmdHandler const *cm
         if (STRING_EQUAL(argv[0], cmd[i].key)) {
             // @todo - Superuser check.
             ClearVar();
-            ConsoleCmdInd evt(GetHsm().GetHsmn(), argv, argc);
+            ConsoleCmd evt(GetHsm().GetHsmn(), argv, argc);
             m_lastCmdFunc = cmd[i].func;
             FW_ASSERT(m_lastCmdFunc);
+            // Ensures the console timer is stopped before running a new command, in case it is currently running
+            // and the new command handler uses it.
+            m_consoleTimer.Stop();
             return m_lastCmdFunc(*this, &evt);
         }
     }
     return CMD_DONE;
 }
 
+void Console::LastCmdDone() {
+    m_lastCmdFunc = NULL;
+    m_consoleTimer.Stop();
+    Prompt();
+}
+
 void Console::RootCmdFunc(Evt const *e) {
     FW_ASSERT(m_rootCmdFunc);
     if (m_rootCmdFunc(*this, e) == CMD_DONE) {
-        m_lastCmdFunc = NULL;
-        Prompt();
+        LastCmdDone();
     }
 }
 
 void Console::LastCmdFunc(Evt const *e) {
     if (m_lastCmdFunc) {
         if (m_lastCmdFunc(*this, e) == CMD_DONE) {
-            m_lastCmdFunc = NULL;
-            Prompt();
+            LastCmdDone();
         }
     }
 }
 
 Console::Console(Hsmn hsmn, char const *name, char const *cmdInputName, char const *cmdParserName) :
-    Active((QStateHandler)&Console::InitialPseudoState, hsmn, name,
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
+    Active((QStateHandler)&Console::InitialPseudoState, hsmn, name),
     m_ifHsmn(HSM_UNDEF), m_outIfHsmn(HSM_UNDEF), m_isDefault(false),
     m_cmdInput(GetCmdInputHsmn(hsmn), cmdInputName, *this),
     m_cmdParser(GetCmdParserHsmn(hsmn), cmdParserName),
-    m_outFifo(m_outFifoStor, OUT_FIFO_ORDER),
-    m_inFifo(m_inFifoStor, IN_FIFO_ORDER),
+    m_outFifo(GetOutFifoStor(hsmn), OUT_FIFO_ORDER),
+    m_inFifo(GetInFifoStor(hsmn), IN_FIFO_ORDER),
     m_argc(0), m_rootCmdFunc(NULL), m_lastCmdFunc(NULL),
-    m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER) {
+    m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER),
+    m_consoleTimer(GetHsm().GetHsmn(), CONSOLE_TIMER) {
+    SET_EVT_NAME(CONSOLE);
     FW_ASSERT((hsmn >= CONSOLE) && (hsmn <= CONSOLE_LAST));
 }
 
@@ -458,6 +496,8 @@ QState Console::Started(Console * const me, QEvt const * const e) {
             CmdInputStartReq req(me->GetCmdInputHsmn(GET_HSMN()), GET_HSMN());
             me->m_cmdInput.dispatch(&req);
             me->Banner();
+            me->m_lastCmdFunc = NULL;
+            me->Prompt();
             return Q_HANDLED();
         }
         case Q_EXIT_SIG: {
@@ -487,6 +527,16 @@ QState Console::Started(Console * const me, QEvt const * const e) {
             }
             return Q_HANDLED();
         }
+        default: {
+            QSignal sig = e->sig;
+            if ((sig == CONSOLE_TIMER) ||
+                (IS_EVT_HSMN_VALID(sig) && IS_INTERFACE_EVT(sig) &&
+                 (sig != CONSOLE_START_REQ) && (sig != CONSOLE_STOP_REQ) && (sig != UART_IN_DATA_IND))) {
+                me->LastCmdFunc(static_cast<Evt const *>(e));
+                return Q_HANDLED();
+            }
+            break;
+        }
     }
     return Q_SUPER(&Console::Root);
 }
@@ -510,8 +560,6 @@ QState Console::Interactive(Console * const me, QEvt const * const e) {
     switch (e->sig) {
         case Q_ENTRY_SIG: {
             EVENT(e);
-            me->m_lastCmdFunc = NULL;
-            me->Prompt();
             return Q_HANDLED();
         }
         case Q_EXIT_SIG: {
@@ -531,19 +579,13 @@ QState Console::Interactive(Console * const me, QEvt const * const e) {
             //for (uint32_t i = 0; i < me->m_argc; i++) {
             //    LOG("argv[%d] = %s", i, me->m_argv[i]);
             //}
-            ConsoleCmdInd ind(GET_HSMN(), me->m_argv, me->m_argc);
+            ConsoleCmd ind(GET_HSMN(), me->m_argv, me->m_argc);
             me->RootCmdFunc(&ind);
             return Q_HANDLED();
         }
-        default: {
-            QSignal sig = e->sig;
-            if (IS_EVT_HSMN_VALID(sig) && IS_INTERFACE_EVT(sig) &&
-                (sig != CONSOLE_START_REQ) && (sig != CONSOLE_STOP_REQ) &&
-                (sig != UART_IN_DATA_IND)) {
-                me->LastCmdFunc(static_cast<Evt const *>(e));
-                return Q_HANDLED();
-            }
-            break;
+        case CONSOLE_RAW_ENABLE_REQ: {
+            EVENT(e);
+            return Q_TRAN(&Console::Raw);
         }
     }
     return Q_SUPER(&Console::Started);
@@ -559,39 +601,20 @@ QState Console::Raw(Console * const me, QEvt const * const e) {
             EVENT(e);
             return Q_HANDLED();
         }
-        case Q_INIT_SIG: {
-            return Q_TRAN(&Console::RawNormal);
+        case RAW_DISABLE: {
+            EVENT(e);
+            return Q_TRAN(&Console::Interactive);
+        }
+        case UART_IN_DATA_IND: {
+            me->LastCmdFunc(static_cast<Evt const *>(e));
+            if (!me->m_lastCmdFunc) {
+                Evt *evt = new Evt(RAW_DISABLE, GET_HSMN(), GET_HSMN());
+                me->PostSync(evt);
+            }
+            return Q_HANDLED();
         }
     }
     return Q_SUPER(&Console::Started);
-}
-
-QState Console::RawNormal(Console * const me, QEvt const * const e) {
-    switch (e->sig) {
-        case Q_ENTRY_SIG: {
-            EVENT(e);
-            return Q_HANDLED();
-        }
-        case Q_EXIT_SIG: {
-            EVENT(e);
-            return Q_HANDLED();
-        }
-    }
-    return Q_SUPER(&Console::Raw);
-}
-
-QState Console::RawFull(Console * const me, QEvt const * const e) {
-    switch (e->sig) {
-        case Q_ENTRY_SIG: {
-            EVENT(e);
-            return Q_HANDLED();
-        }
-        case Q_EXIT_SIG: {
-            EVENT(e);
-            return Q_HANDLED();
-        }
-    }
-    return Q_SUPER(&Console::Raw);
 }
 
 /*

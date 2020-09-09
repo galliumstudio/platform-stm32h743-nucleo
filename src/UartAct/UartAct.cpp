@@ -132,8 +132,8 @@ UartAct::Config const UartAct::CONFIG[] = {
 // Corresponds to what was done in _msp.cpp file.
 void UartAct::InitUart() {
     switch((uint32_t)(m_config->uart)) {
-        case (uint32_t)USART3: __HAL_RCC_USART3_CLK_ENABLE(); break;
-        case (uint32_t)USART6: __HAL_RCC_USART6_CLK_ENABLE(); break;
+        case USART3_BASE: __HAL_RCC_USART3_CLK_ENABLE(); break;
+        case USART6_BASE: __HAL_RCC_USART6_CLK_ENABLE(); break;
         // Add more cases here...
         default: FW_ASSERT(0); break;
     }
@@ -162,7 +162,12 @@ void UartAct::InitUart() {
     m_txDmaHandle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     m_txDmaHandle.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
     m_txDmaHandle.Init.Mode                = DMA_NORMAL;
-    m_txDmaHandle.Init.Priority            = DMA_PRIORITY_MEDIUM;
+    m_txDmaHandle.Init.Priority            = DMA_PRIORITY_LOW; // DMA_PRIORITY_HIGH;
+    m_txDmaHandle.Init.FIFOMode            = DMA_FIFOMODE_DISABLE; // DMA_FIFOMODE_ENABLE
+    m_txDmaHandle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_HALFFULL; // Don't care when FIFO disabled.
+    m_txDmaHandle.Init.MemBurst            = DMA_MBURST_SINGLE;
+    m_txDmaHandle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+
     HAL_DMA_Init(&m_txDmaHandle);
     // Associate the initialized DMA handle to the UART handle
     __HAL_LINKDMA(&m_hal, hdmatx, m_txDmaHandle);
@@ -175,12 +180,11 @@ void UartAct::InitUart() {
     m_rxDmaHandle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     m_rxDmaHandle.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
     m_rxDmaHandle.Init.Mode                = DMA_CIRCULAR;
-    m_rxDmaHandle.Init.Priority            = DMA_PRIORITY_HIGH;
-    m_rxDmaHandle.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
-    m_rxDmaHandle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-    m_rxDmaHandle.Init.MemBurst            = DMA_MBURST_INC4;
-    m_rxDmaHandle.Init.PeriphBurst         = DMA_PBURST_INC4;
-    HAL_DMA_DeInit(&m_rxDmaHandle);
+    m_rxDmaHandle.Init.Priority            = DMA_PRIORITY_LOW; // DMA_PRIORITY_HIGH;
+    m_rxDmaHandle.Init.FIFOMode            = DMA_FIFOMODE_DISABLE; // DMA_FIFOMODE_ENABLE
+    m_rxDmaHandle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_HALFFULL; // Don't care when FIFO disabled.
+    m_rxDmaHandle.Init.MemBurst            = DMA_MBURST_SINGLE;
+    m_rxDmaHandle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
     HAL_DMA_Init(&m_rxDmaHandle);
     // Associate the initialized DMA handle to the the UART handle
     __HAL_LINKDMA(&m_hal, hdmarx, m_rxDmaHandle);
@@ -200,8 +204,8 @@ void UartAct::InitUart() {
 
 void UartAct::DeInitUart() {
     switch((uint32_t)(m_hal.Instance)) {
-        case (uint32_t)USART3: __HAL_RCC_USART3_FORCE_RESET(); __HAL_RCC_USART3_RELEASE_RESET(); __HAL_RCC_USART3_CLK_DISABLE(); break;
-        case (uint32_t)USART6: __HAL_RCC_USART6_FORCE_RESET(); __HAL_RCC_USART6_RELEASE_RESET(); __HAL_RCC_USART6_CLK_DISABLE(); break;
+        case USART3_BASE: __HAL_RCC_USART3_FORCE_RESET(); __HAL_RCC_USART3_RELEASE_RESET(); __HAL_RCC_USART3_CLK_DISABLE(); break;
+        case USART6_BASE: __HAL_RCC_USART6_FORCE_RESET(); __HAL_RCC_USART6_RELEASE_RESET(); __HAL_RCC_USART6_CLK_DISABLE(); break;
         // Add more cases here...
         default: FW_ASSERT(0); break;
     }
@@ -212,10 +216,7 @@ void UartAct::DeInitUart() {
 }
 
 UartAct::UartAct(Hsmn hsmn, char const *name, char const *inName, char const *outName) :
-    Active((QStateHandler)&UartAct::InitialPseudoState, hsmn, name,
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
+    Active((QStateHandler)&UartAct::InitialPseudoState, hsmn, name),
     m_config(NULL),
     m_uartInHsmn(GetUartInHsmn(hsmn)),
     m_uartOutHsmn(GetUartOutHsmn(hsmn)),
@@ -223,6 +224,7 @@ UartAct::UartAct(Hsmn hsmn, char const *name, char const *inName, char const *ou
     m_uartOut(m_uartOutHsmn, outName, m_hal),
     m_client(HSM_UNDEF), m_outFifo(NULL), m_inFifo(NULL),
     m_stateTimer(hsmn, STATE_TIMER) {
+    SET_EVT_NAME(UART_ACT);
     FW_ASSERT((hsmn >= UART_ACT) && (hsmn <= UART_ACT_LAST));
     memset(&m_hal, 0, sizeof(m_hal));
     memset(&m_txDmaHandle, 0, sizeof(m_txDmaHandle));
@@ -483,6 +485,8 @@ QState UartAct::Stopping(UartAct * const me, QEvt const * const e) {
             EVENT(e);
             Evt *evt = new UartActStopCfm(me->GetHsm().GetInHsmn(), GET_HSMN(), me->GetHsm().GetInSeq(), ERROR_SUCCESS);
             Fw::Post(evt);
+            HAL_UART_DeInit(&me->m_hal);
+            me->DeInitUart();
             status = Q_TRAN(&UartAct::Stopped);
             break;
         }

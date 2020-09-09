@@ -49,41 +49,74 @@ TimHalMap Periph::m_timHalMap(m_timHalStor, ARRAY_COUNT(m_timHalStor), TimHal(NU
 
 TIM_HandleTypeDef Periph::m_tim1Hal;
 TIM_HandleTypeDef Periph::m_tim2Hal;
+TIM_HandleTypeDef Periph::m_tim3Hal;
 // Add more HAL handles here.
 
 // Setup common peripherals for normal power mode.
 // These common peripherals are shared among different HW blocks and cannot be setup individually
-// USART3 - TX PD.8 DMA1 Request 3 Channel 4
-//          RX PD.9 DMA1 Request 1 Channel 4
-// USART6 - TX PG.14 DMA2 Request 6 Channel 5
-//          RX PG.9 DMA2 Request 1 Channel 5
-// LED0 - PE.8 PWM TIM1 Channel 1
+// USART3 - TX PD.8 DMA1 Stream 3 Request 4
+//          RX PD.9 DMA1 Stream 1 Request 4
+// USART6 - TX PG.14 DMA2 Stream 6 Request 5
+//          RX PG.9 DMA2 Stream 1 Request 5
+// UserBtn  PC.13
+// LED0 - PB.0 PWM TIM3_CH3 (or TIM1_CH2N)
+// Reserved for LEDs PB.7 PB.14
+// Reserved for SWD PA.13 PA.14
+
+// LedPanel 0
+// DMA2 Stream 3 Channel 6 (TIM1_CH1)
+// CLK PWM Timer    TIM1
+// CLK Gate Timer   TIM4 (only if USE_SINGLE_PULSE_MODE is not defined in LedPanel.h)
+// ENABLE Timer     TIM9 (primary)
+// CLK              PE.9 (AF1 TIM1_CH1)
+// LATCH            PC.4
+// ENABLE PWM       PE.5 (AF4 TIM15 CH1)
+// ADDR             PD.4 - PD.7 (Must be contiguous.)
+// RGB_A            PA.0 - PA.5 (Must be contiguous. RGB group A. Contains 2 scan sets.)
+// RGB_B            PA.6 - PA.11 (Must be contigous. RGB group B. Contains 2 scan sets.)
+
+// LedPanel 1
+// DMA2 Stream 2 Channel 7 (TIM8_CH1)
+// CLK PWM Timer    TIM8
+// CLK Gate Timer   TIM5 (only if USE_SINGLE_PULSE_MODE is not defined in LedPanel.h)
+// ENABLE Timer     TIM9 (secondary)
+// CLK              PC.6 (AF3 TIM8_CH1)
+// LATCH            PC.12
+// ENABLE PWM       PE.6 (AF4 TIM15 CH2)
+// ADDR             PC.8 - PC.11 (Must be contiguous.)
+// RGB_A            PF.0 - PF.5 (Must be contiguous. RGB group A. Contains 2 scan sets.)
+// RGB_B            PF.6 - PF.11 (Must be contigous. RGB group B. Contains 2 scan sets.)
 //
-// TIM1 configuration:
-// APB1CLK = HCLK -> TIM1CLK = HCLK = SystemCoreClock (See "clock tree" and "timer clock" in ref manual.)
-#define TIM1CLK             (SystemCoreClock)   // 80MHz
-#define TIM1_COUNTER_CLK    (20000000)          // 20MHz
-#define TIM1_PWM_FREQ       (20000)             // 20kHz
+// TIM3 configuration:
+#define TIM3CLK             (SystemCoreClock/4) // 100MHz (on APB1) @todo To verify.
+#define TIM3_COUNTER_CLK    (20000000)          // 20MHz
+#define TIM3_PWM_FREQ       (20000)             // 20kHz
 
 void Periph::SetupNormal() {
+    __GPIOA_CLK_ENABLE();
+    __GPIOB_CLK_ENABLE();
+    __GPIOC_CLK_ENABLE();
     __GPIOD_CLK_ENABLE();
+    __GPIOE_CLK_ENABLE();
+    __GPIOF_CLK_ENABLE();
     __GPIOG_CLK_ENABLE();
+    __HAL_RCC_CRC_CLK_ENABLE();     // Required by emwin.
     __HAL_RCC_DMA1_CLK_ENABLE();
     __HAL_RCC_DMA2_CLK_ENABLE();
-    __HAL_RCC_TIM1_CLK_ENABLE();
+    __HAL_RCC_TIM3_CLK_ENABLE();
 
-    // Initialize TIM1 for PWM (shared by LED0...).
+    // Initialize TIM3 for PWM (shared by LED0...).
     HAL_StatusTypeDef status;
-    m_tim1Hal.Instance = TIM1;
-    m_tim1Hal.Init.Prescaler = (TIM1CLK / TIM1_COUNTER_CLK) - 1;
-    m_tim1Hal.Init.Period = (TIM1_COUNTER_CLK / TIM1_PWM_FREQ) - 1;
-    m_tim1Hal.Init.ClockDivision = 0;
-    m_tim1Hal.Init.CounterMode = TIM_COUNTERMODE_UP;
-    m_tim1Hal.Init.RepetitionCounter = 0;
-    status = HAL_TIM_PWM_Init(&m_tim1Hal);
+    m_tim3Hal.Instance = TIM3;
+    m_tim3Hal.Init.Prescaler = (TIM3CLK / TIM3_COUNTER_CLK) - 1;
+    m_tim3Hal.Init.Period = (TIM3_COUNTER_CLK / TIM3_PWM_FREQ) - 1;
+    m_tim3Hal.Init.ClockDivision = 0;
+    m_tim3Hal.Init.CounterMode = TIM_COUNTERMODE_UP;
+    m_tim3Hal.Init.RepetitionCounter = 0;
+    status = HAL_TIM_PWM_Init(&m_tim3Hal);
     FW_ASSERT(status == HAL_OK);
     // Add timHandle to map.
-    SetHal(TIM1, &m_tim1Hal);
+    SetHal(TIM3, &m_tim3Hal);
 }
 
 // Setup common peripherals for low power mode.
@@ -93,14 +126,68 @@ void Periph::SetupLowPower() {
 
 // Reset common peripherals to startup state.
 void Periph::Reset() {
-    HAL_TIM_PWM_DeInit(&m_tim1Hal);
-    __HAL_RCC_TIM1_CLK_DISABLE();
-    __HAL_RCC_DMA1_CLK_DISABLE();
+    HAL_TIM_PWM_DeInit(&m_tim3Hal);
+    __HAL_RCC_TIM3_CLK_DISABLE();
     __HAL_RCC_DMA2_CLK_DISABLE();
-    __GPIOD_CLK_DISABLE();
+    __HAL_RCC_DMA1_CLK_DISABLE();
+    __HAL_RCC_CRC_CLK_DISABLE();
     __GPIOG_CLK_DISABLE();
+    __GPIOF_CLK_DISABLE();
+    __GPIOE_CLK_DISABLE();
+    __GPIOD_CLK_DISABLE();
+    __GPIOC_CLK_DISABLE();
+    __GPIOB_CLK_DISABLE();
+    __GPIOA_CLK_DISABLE();
     // TBD.
 }
 
+void Periph::EnableTimClk(TIM_TypeDef *tim) {
+    switch((uint32_t)tim) {
+        case TIM1_BASE: __HAL_RCC_TIM1_CLK_ENABLE(); break;
+        case TIM2_BASE: __HAL_RCC_TIM2_CLK_ENABLE(); break;
+        case TIM3_BASE: __HAL_RCC_TIM3_CLK_ENABLE(); break;
+        case TIM4_BASE: __HAL_RCC_TIM4_CLK_ENABLE(); break;
+        case TIM5_BASE: __HAL_RCC_TIM5_CLK_ENABLE(); break;
+        case TIM6_BASE: __HAL_RCC_TIM6_CLK_ENABLE(); break;
+        case TIM7_BASE: __HAL_RCC_TIM7_CLK_ENABLE(); break;
+        case TIM8_BASE: __HAL_RCC_TIM8_CLK_ENABLE(); break;
+        case TIM15_BASE: __HAL_RCC_TIM15_CLK_ENABLE(); break;
+        case TIM16_BASE: __HAL_RCC_TIM16_CLK_ENABLE(); break;
+        case TIM17_BASE: __HAL_RCC_TIM17_CLK_ENABLE(); break;
+        default: FW_ASSERT(0); break;
+    }
+}
+
+void Periph::DisableTimClk(TIM_TypeDef *tim) {
+    switch((uint32_t)tim) {
+        case TIM1_BASE: __HAL_RCC_TIM1_CLK_DISABLE(); break;
+        case TIM2_BASE: __HAL_RCC_TIM2_CLK_DISABLE(); break;
+        case TIM3_BASE: __HAL_RCC_TIM3_CLK_DISABLE(); break;
+        case TIM4_BASE: __HAL_RCC_TIM4_CLK_DISABLE(); break;
+        case TIM5_BASE: __HAL_RCC_TIM5_CLK_DISABLE(); break;
+        case TIM6_BASE: __HAL_RCC_TIM6_CLK_DISABLE(); break;
+        case TIM7_BASE: __HAL_RCC_TIM7_CLK_DISABLE(); break;
+        case TIM8_BASE: __HAL_RCC_TIM8_CLK_DISABLE(); break;
+        case TIM15_BASE: __HAL_RCC_TIM15_CLK_DISABLE(); break;
+        case TIM16_BASE: __HAL_RCC_TIM16_CLK_DISABLE(); break;
+        case TIM17_BASE: __HAL_RCC_TIM17_CLK_DISABLE(); break;
+        default: FW_ASSERT(0); break;
+    }
+}
+
+uint32_t Periph::GetTimFreq(TIM_TypeDef *tim) {
+    switch((uint32_t)tim) {
+        case TIM1_BASE:
+        case TIM8_BASE:
+        case TIM15_BASE:
+        case TIM16_BASE:
+        case TIM17_BASE: {
+            return SystemCoreClock/2;   // 100000000 (on APB2). @todo Verify.
+        }
+        default: {
+            return SystemCoreClock/4;   // 100000000 (on APB1). @todo Verify.
+        }
+    }
+}
 
 } // namespace APP

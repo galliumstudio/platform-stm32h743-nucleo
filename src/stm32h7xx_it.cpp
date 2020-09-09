@@ -76,6 +76,8 @@
 #include "qpcpp.h"
 #include "app_hsmn.h"
 #include "UartAct.h"
+#include "GpioIn.h"
+#include "LedPanel.h"
 #include "fw_log.h"
 
 /* USER CODE BEGIN 0 */
@@ -103,7 +105,7 @@ extern "C" void SysTick_Handler(void){
   HAL_SYSTICK_IRQHandler();
   /* USER CODE BEGIN SysTick_IRQn 1 */
   QXK_ISR_ENTRY();
-  QP::QF::tickX_(0);
+  QP::QF::tickX_(TICK_RATE_BSP);
   QXK_ISR_EXIT();
   /* USER CODE END SysTick_IRQn 1 */
 }
@@ -202,6 +204,75 @@ extern "C" void USART6_IRQHandler(void)
 {
     QXK_ISR_ENTRY();
     HandleUartIrq(UART6_ACT);
+    QXK_ISR_EXIT();
+}
+
+// GPIO IN
+// Must be declared as extern "C" in header.
+extern "C" void EXTI15_10_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_15);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_14);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_13);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_12);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_11);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_10);
+    QXK_ISR_EXIT();
+}
+extern "C" void EXTI9_5_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_9);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_8);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_5);
+    QXK_ISR_EXIT();
+}
+extern "C" void EXTI4_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_4);
+    QXK_ISR_EXIT();
+}
+extern "C" void EXTI3_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_3);
+    QXK_ISR_EXIT();
+}
+extern "C" void EXTI2_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_2);
+    QXK_ISR_EXIT();
+}
+extern "C" void EXTI1_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_1);
+    QXK_ISR_EXIT();
+}
+// User Button (PA.0)
+extern "C" void EXTI0_IRQHandler(void)
+{
+    QXK_ISR_ENTRY();
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
+    QXK_ISR_EXIT();
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t pin) {
+    GpioIn::GpioIntCallback(pin);
+}
+
+// Slot timer shared by all LedPanel objects.
+extern "C" void TIM15_IRQHandler(void) {
+    QXK_ISR_ENTRY();
+    if (TIM15->SR & TIM_IT_UPDATE) {
+        TIM15->SR = ~TIM_IT_UPDATE;
+        LedPanel::SlotTimIntCallback();
+    }
     QXK_ISR_EXIT();
 }
 

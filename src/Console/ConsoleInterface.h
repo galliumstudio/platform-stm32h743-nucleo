@@ -53,7 +53,7 @@ enum {
     CONSOLE_START_CFM,
     CONSOLE_STOP_REQ,
     CONSOLE_STOP_CFM,
-    CONSOLE_CMD_IND,
+    CONSOLE_RAW_ENABLE_REQ,     // type = Evt
 };
 
 enum {
@@ -111,17 +111,6 @@ public:
     ConsoleStopCfm(Hsmn to, Hsmn from, Sequence seq,
                    Error error, Hsmn origin = HSM_UNDEF, Reason reason = 0) :
         ErrorEvt(CONSOLE_STOP_CFM, to, from, seq, error, origin, reason) {}
-};
-
-class ConsoleCmdInd: public Evt {
-public:
-    ConsoleCmdInd(Hsmn hsmn, char const **argv, uint32_t argc) :
-        Evt(CONSOLE_CMD_IND, hsmn, hsmn), m_argv(argv), m_argc(argc) {}
-    char const **Argv() const { return m_argv; }
-    uint32_t Argc() const { return m_argc; }
-private:
-    char const **m_argv;
-    uint32_t m_argc;
 };
 
 } // namespace APP

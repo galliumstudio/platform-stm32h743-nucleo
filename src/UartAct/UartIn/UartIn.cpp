@@ -54,7 +54,7 @@ static char const * const internalEvtName[] = {
     "DONE",
     "DATA_RDY",
     "DMA_RECV",
-    "OVERFLOW",
+    "FIFO_OVERFLOW",
     "HW_FAIL",
 };
 
@@ -111,16 +111,15 @@ void UartIn::DisableRxInt() {
 }
 
 void UartIn::CleanInvalidateCache(uint32_t addr, uint32_t len) {
-    //SCB_CleanInvalidateDCache();
-    SCB_CleanInvalidateDCache_by_Addr(reinterpret_cast<uint32_t *>(ROUND_DOWN_32(addr)), ROUND_UP_32(addr + len) - ROUND_DOWN_32(addr));
+
+    SCB_InvalidateDCache_by_Addr(reinterpret_cast<uint32_t *>(ROUND_DOWN_32(addr)), ROUND_UP_32(addr + len) - ROUND_DOWN_32(addr));
 }
 
 UartIn::UartIn(Hsmn hsmn, char const *name, UART_HandleTypeDef &hal) :
-    Region((QStateHandler)&UartIn::InitialPseudoState, hsmn, name,
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
-    m_hal(hal), m_client(HSM_UNDEF), m_fifo(NULL), m_dataRecv(false), m_activeTimer(hsmn, ACTIVE_TIMER) {}
+    Region((QStateHandler)&UartIn::InitialPseudoState, hsmn, name),
+    m_hal(hal), m_manager(HSM_UNDEF), m_client(HSM_UNDEF), m_fifo(NULL), m_dataRecv(false), m_activeTimer(hsmn, ACTIVE_TIMER) {
+    SET_EVT_NAME(UART_IN);
+}
 
 QState UartIn::InitialPseudoState(UartIn * const me, QEvt const * const e) {
     (void)e;
@@ -184,6 +183,7 @@ QState UartIn::Stopped(UartIn * const me, QEvt const * const e) {
         case UART_IN_START_REQ: {
             EVENT(e);
             UartInStartReq const &req = static_cast<UartInStartReq const &>(*e);
+            me->m_manager = req.GetFrom();
             me->m_fifo = req.GetFifo();
             FW_ASSERT(me->m_fifo);
             me->m_fifo->Reset();
@@ -285,7 +285,7 @@ QState UartIn::Normal(UartIn * const me, QEvt const * const e) {
             uint32_t dmaRxCount = me->m_fifo->GetDiff(dmaCurrIndex, me->m_fifo->GetWriteIndex());
             if (dmaRxCount > 0) {
                 if (dmaRxCount > me->m_fifo->GetAvailCount()) {
-                    Evt  *evt = new Evt(OVERFLOW, GET_HSMN());
+                    Evt  *evt = new Evt(FIFO_OVERFLOW, GET_HSMN());
                     me->PostSync(evt);
                 } else {
                     me->m_fifo->CacheOp(UartIn::CleanInvalidateCache, dmaRxCount);
@@ -301,7 +301,7 @@ QState UartIn::Normal(UartIn * const me, QEvt const * const e) {
             status = Q_TRAN(&UartIn::Inactive);
             break;
         }
-        // TODO - OVERFLOW handling
+        // TODO - FIFO_OVERFLOW handling
         default: {
             status = Q_SUPER(&UartIn::Started);
             break;

@@ -39,6 +39,7 @@
 #include "qpcpp.h"
 #include "fw_region.h"
 #include "fw_active.h"
+#include "fw_xthread.h"
 #include "fw_assert.h"
 
 FW_DEFINE_THIS_FILE("fw_region.cpp")
@@ -48,6 +49,14 @@ using namespace QP;
 namespace FW {
 
 void Region::Init(Active *container) {
+    FW_ASSERT(container);
+    m_container = container;
+    container->Add(this);
+    m_hsm.Init(container);
+    QHsm::init();
+}
+
+void Region::Init(XThread *container) {
     FW_ASSERT(container);
     m_container = container;
     container->Add(this);

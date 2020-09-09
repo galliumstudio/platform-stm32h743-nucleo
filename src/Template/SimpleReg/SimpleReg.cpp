@@ -46,27 +46,28 @@ FW_DEFINE_THIS_FILE("SimpleReg.cpp")
 
 namespace APP {
 
+#undef ADD_EVT
+#define ADD_EVT(e_) #e_,
+
 static char const * const timerEvtName[] = {
-    "STATE_TIMER",
+    "SIMPLE_REG_TIMER_EVT_START",
+    SIMPLE_REG_TIMER_EVT
 };
 
 static char const * const internalEvtName[] = {
-    "DONE",
+    "SIMPLE_REG_INTERNAL_EVT_START",
+    SIMPLE_REG_INTERNAL_EVT
 };
 
 static char const * const interfaceEvtName[] = {
-    "SIMPLE_REG_START_REQ",
-    "SIMPLE_REG_START_CFM",
-    "SIMPLE_REG_STOP_REQ",
-    "SIMPLE_REG_STOP_CFM",
+    "SIMPLE_REG_INTERFACE_EVT_START",
+    SIMPLE_REG_INTERFACE_EVT
 };
 
 SimpleReg::SimpleReg() :
-    Region((QStateHandler)&SimpleReg::InitialPseudoState, SIMPLE_REG, "SIMPLE_REG",
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
+    Region((QStateHandler)&SimpleReg::InitialPseudoState, SIMPLE_REG, "SIMPLE_REG"),
     m_stateTimer(this->GetHsm().GetHsmn(), STATE_TIMER) {
+    SET_EVT_NAME(SIMPLE_REG);
 }
 
 QState SimpleReg::InitialPseudoState(SimpleReg * const me, QEvt const * const e) {

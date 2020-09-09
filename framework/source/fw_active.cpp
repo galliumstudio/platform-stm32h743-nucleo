@@ -68,7 +68,7 @@ void Active::Add(Region *reg) {
 
 void Active::dispatch(QEvt const * const e) {
     Hsmn hsmn;
-    // Discard event if it is sent to an undefined HSM.
+    // Discard event if it is associated with an undefined HSM.
     // This happens when a timer event already posted is canceled.
     if (!IS_EVT_HSMN_VALID(e->sig)) {
         return;
@@ -97,12 +97,6 @@ void Active::dispatch(QEvt const * const e) {
 void Active::PostSync(Evt const *e) {
     FW_ASSERT(e);
     postLIFO(e);
-}
-
-QEvt const **Active::GetEvtQueueStor(uint16_t *count) {
-    FW_ASSERT(count);
-    *count = ARRAY_COUNT(m_evtQueueStor);
-    return m_evtQueueStor;
 }
 
 } // namespace FW

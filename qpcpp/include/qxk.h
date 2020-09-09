@@ -4,14 +4,14 @@
 /// @ingroup qxk
 /// @cond
 ///***************************************************************************
-/// Last updated for version 5.9.7
-/// Last updated on  2017-08-18
+/// Last updated for version 6.2.0
+/// Last updated on  2018-03-16
 ///
 ///                    Q u a n t u m     L e a P s
 ///                    ---------------------------
 ///                    innovating embedded systems
 ///
-/// Copyright (C) Quantum Leaps, LLC. All rights reserved.
+/// Copyright (C) 2002-2018 Quantum Leaps. All rights reserved.
 ///
 /// This program is open source software: you can redistribute it and/or
 /// modify it under the terms of the GNU General Public License as published
@@ -32,7 +32,7 @@
 /// along with this program. If not, see <http://www.gnu.org/licenses/>.
 ///
 /// Contact information:
-/// https://state-machine.com
+/// https://www.state-machine.com
 /// mailto:info@state-machine.com
 ///***************************************************************************
 /// @endcond
@@ -45,23 +45,25 @@
 #include "qpset.h"    // QXK kernel uses the native QF priority set
 
 //****************************************************************************
-// QF configuration for QXK: data members of the ::QMActive class...
+// QF configuration for QXK -- data members of the QActive class...
 
-//! This macro defines the type of the event queue used for the AOs
+//! Kernel-dependent type of the event queue used for QXK threads
+//
 /// @description
 /// QXK uses the native QF event queue QEQueue.
 ///
 #define QF_EQUEUE_TYPE      QEQueue
 
-//! Private OS-object attribute of active objects in QXK
-///
+//! Kernel-dependent OS-attribute of threads in QXK
+//
 /// @description
-/// QXK uses this member to store the private stack poiner for the thread.
-/// (The private stack pointer is NULL for AO-threads).///
+/// QXK uses this member to store the private stack poiner for extended
+/// threads. (The private stack pointer is NULL for basic-threads).
 ///
 #define QF_OS_OBJECT_TYPE   void*
 
-//! OS-dependent representation of the private thread
+//! Kernel-dependent type of the thread attribute in QXK
+//
 /// @description
 /// QXK uses this member to store the private Thread-Local Storage pointer.
 ///
@@ -81,14 +83,13 @@ extern "C" {
 
 //! attributes of the QXK kernel
 struct QXK_Attr {
-    QP::QActive *curr;       //!< currently executing thread
-    QP::QActive *next;       //!< next thread to execute
-    uint_fast8_t actPrio;    //!< prio of the active basic thread
-    uint_fast8_t lockPrio;   //!< lock prio (0 == no-lock)
-    uint_fast8_t lockHolder; //!< prio of the lock holder
-#ifndef QXK_ISR_CONTEXT_
-    uint_fast8_t volatile intNest;    //!< ISR nesting level
-#endif // QXK_ISR_CONTEXT_
+    QP::QActive * volatile curr; //!< currently executing thread
+    QP::QActive * volatile next; //!< next thread to execute
+    uint8_t volatile actPrio;    //!< prio of the active basic thread
+    uint8_t volatile lockPrio;   //!< lock prio (0 == no-lock)
+    uint8_t volatile lockHolder; //!< prio of the lock holder
+    uint8_t volatile intNest;    //!< ISR nesting level
+    QP::QActive * idleThread;    //!< pointer to the idle thread
     QP::QPSet readySet; //!< ready-set of basic- and extended-threads
 };
 
@@ -105,6 +106,32 @@ void QXK_activate_(void);
 
 //! return the currently executing active-object/thread
 QP::QActive *QXK_current(void);
+
+#ifdef QXK_ON_CONTEXT_SW
+
+    //! QXK context switch callback (customized in BSPs for QXK)
+    ///
+    /// @description
+    /// This callback function provides a mechanism to perform additional
+    /// custom operations when QXK switches context from one thread to
+    /// another.
+    ///
+    /// @param[in] prev   pointer to the previous thread (active object)
+    ///                   (prev==0 means that @p prev was the QXK idle thread)
+    /// @param[in] next   pointer to the next thread (active object)
+    ///                   (next==0) means that @p next is the QXK idle thread)
+    /// @attention
+    /// QXK_onContextSw() is invoked with interrupts **disabled** and must also
+    /// return with interrupts **disabled**.
+    ///
+    /// @note
+    /// This callback is enabled by defining the macro #QXK_ON_CONTEXT_SW.
+    ///
+    /// @include qxk_oncontextsw.cpp
+    ///
+    void QXK_onContextSw(QP::QActive *prev, QP::QActive *next);
+
+#endif // QXK_ON_CONTEXT_SW
 
 } // extern "C"
 
@@ -195,7 +222,7 @@ public:
         Q_ASSERT_ID(110, (me_)->m_eQueue.m_frontEvt != static_cast<QEvt *>(0))
 
     #define QACTIVE_EQUEUE_SIGNAL_(me_) do { \
-        QXK_attr_.readySet.insert((me_)->m_prio); \
+        QXK_attr_.readySet.insert(static_cast<uint_fast8_t>((me_)->m_prio)); \
         if (!QXK_ISR_CONTEXT_()) { \
             if (QXK_sched_() != static_cast<uint_fast8_t>(0)) { \
                 QXK_activate_(); \
@@ -216,3 +243,4 @@ public:
 #endif // QP_IMPL
 
 #endif // qxk_h
+

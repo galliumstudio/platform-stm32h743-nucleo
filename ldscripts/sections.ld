@@ -18,7 +18,7 @@ _estack = __stack; 	/* STM specific definition */
  * for the different modes.
  */
 
-__Main_Stack_Size = 1024*16 ;	/* Gallium - Increase stack size. */
+__Main_Stack_Size = 1024*16 * 2 ;	/* Gallium - Increase stack size. */
 
 PROVIDE ( _Main_Stack_Size = __Main_Stack_Size ) ;
 
@@ -32,7 +32,7 @@ PROVIDE ( _Main_Stack_Limit = __Main_Stack_Limit ) ;
  * There will be a link error if there is not this amount of 
  * RAM free at the end. 
  */
-_Minimum_Stack_Size = 256 ;
+_Minimum_Stack_Size = __Main_Stack_Size ;
 
 /*
  * Default heap definitions.
@@ -251,6 +251,14 @@ SECTIONS
        *(.data.CCMRAM .data.CCMRAM.*)
        . = ALIGN(4) ;
     } > CCMRAM AT>FLASH
+
+    /* Gallium */
+    .data_DTCM : ALIGN(4)
+    {
+       FILL(0xFF)
+       *(.data.DTCM .data.DTCM.*)
+       . = ALIGN(4) ;
+    } > DTCM AT>FLASH
 
 	/* 
      * This address is used by the startup code to 

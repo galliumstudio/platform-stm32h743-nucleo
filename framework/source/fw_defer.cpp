@@ -48,7 +48,7 @@ using namespace QP;
 
 namespace FW {
 
-void DeferEQueue::Init(Active *container, QEvt const *qSto[], uint16_t qLen) {
+void DeferEQueue::Init(QActive *container, QEvt const *qSto[], uint16_t qLen) {
     FW_ASSERT(container && qSto && qLen);
     m_container = container;
     QEQueue::init(qSto, qLen);

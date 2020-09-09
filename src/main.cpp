@@ -85,16 +85,19 @@
 #include "fw_assert.h"
 #include "Console.h"
 #include "System.h"
+#include "GpioInAct.h"
 #include "CompositeAct.h"
-#include "CompositeActInterface.h"
 #include "SimpleAct.h"
-#include "SimpleActInterface.h"
+#include "Demo.h"
+#include "GpioOutAct.h"
 #include "UartAct.h"
-#include "UartActInterface.h"
+#include "LedPanel.h"
+#include "GuiMgr.h"
+#include "Wifi8266.h"
+
 #include "SystemInterface.h"
 #include "ConsoleInterface.h"
 #include "ConsoleCmd.h"
-#include "SystemCmd.h"
 
 FW_DEFINE_THIS_FILE("main.cpp")
 
@@ -121,8 +124,15 @@ static Console consoleUart3(CONSOLE_UART3, "CONSOLE_UART3", "CMD_INPUT_UART3", "
 static Console consoleUart6(CONSOLE_UART6, "CONSOLE_UART6", "CMD_INPUT_UART6", "CMD_PARSER_UART6");
 static CompositeAct compositeAct;
 static SimpleAct simpleAct;
+static Demo demo;
+static GpioOutAct gpioOutAct;
+static GpioInAct gpioInAct;
 static UartAct uartAct3(UART3_ACT, "UART3_ACT", "UART3_IN", "UART3_OUT");
 static UartAct uartAct6(UART6_ACT, "UART6_ACT", "UART6_IN", "UART6_OUT");
+static LedPanel ledPanel0;
+static LedPanel ledPanel1;
+static GuiMgr guiMgr;
+static Wifi8266 wifi8266;
 
 /* Private function prototypes -----------------------------------------------*/
 static void SystemClock_Config(void);
@@ -137,11 +147,10 @@ static void CPU_CACHE_Enable(void);
   * @param  None
   * @retval None
   */
-int main(void)
-{
+int main(void) {
     // Configure the MPU attributes as Write Through
     // Gallium - Test only. Use flush.
-    //MPU_Config();
+    MPU_Config();
     // Enable the CPU Cache.
     CPU_CACHE_Enable();
 
@@ -150,16 +159,9 @@ int main(void)
 
     // Initialize QP, framework and BSP (including HAL).
     Fw::Init();
-
     // Configure log settings.
-    Log::SetVerbosity(5);
+    Log::SetVerbosity(4);
     Log::OnAll();
-    //Log::Off(SYSTEM);
-    //Log::Off(SAMPLE_ACT);
-    //Log::Off(SAMPLE_REG0);
-    //Log::Off(SAMPLE_REG1);
-    //Log::Off(SAMPLE_REG2);
-    //Log::Off(SAMPLE_REG3);
     Log::Off(UART3_IN);
     Log::Off(UART6_IN);
     Log::Off(UART3_OUT);
@@ -170,22 +172,33 @@ int main(void)
     Log::Off(CMD_PARSER_UART6);
     Log::Off(CONSOLE_UART3);
     Log::Off(CONSOLE_UART6);
+    Log::Off(LED_PANEL0);
+    Log::Off(LED_PANEL1);
+    Log::Off(LED_FRAME);
+    Log::Off(GUI_MGR);
 
     // Start active objects.
     compositeAct.Start(PRIO_COMPOSITE_ACT);
     simpleAct.Start(PRIO_SIMPLE_ACT);
+    demo.Start(PRIO_DEMO);
+    gpioOutAct.Start(PRIO_GPIO_OUT_ACT);
+    gpioInAct.Start(PRIO_GPIO_IN_ACT);
     uartAct3.Start(PRIO_UART3_ACT);
     uartAct6.Start(PRIO_UART6_ACT);
     consoleUart3.Start(PRIO_CONSOLE_UART3);
     consoleUart6.Start(PRIO_CONSOLE_UART6);
+    ledPanel0.Start(PRIO_LED_PANEL0);
+    ledPanel1.Start(PRIO_LED_PANEL1);
+    guiMgr.Start(PRIO_GUI_MGR);
+    wifi8266.Start(PRIO_WIFI8266);
     sys.Start(PRIO_SYSTEM);
 
     // Kick off the topmost active objects.
     Evt *evt;
-    evt = new ConsoleStartReq(CONSOLE_UART3, HSM_UNDEF, 0, ConsoleCmd, UART3_ACT, false);
+    evt = new ConsoleStartReq(CONSOLE_UART3, HSM_UNDEF, 0, ConsoleCmd, UART3_ACT, true);
     Fw::Post(evt);
-    evt = new ConsoleStartReq(CONSOLE_UART6, HSM_UNDEF, 0, ConsoleCmd, UART6_ACT, true);
-    Fw::Post(evt);
+    //evt = new ConsoleStartReq(CONSOLE_UART6, HSM_UNDEF, 0, ConsoleCmd, UART6_ACT, false);
+    //Fw::Post(evt);
     evt = new SystemStartReq(SYSTEM, HSM_UNDEF, 0);
     Fw::Post(evt);
     return QP::QF::run();
@@ -215,6 +228,7 @@ int main(void)
   */
 static void SystemClock_Config(void)
 {
+#ifdef BOARD_NUCLEO
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
   RCC_OscInitTypeDef RCC_OscInitStruct;
   HAL_StatusTypeDef ret = HAL_OK;
@@ -258,16 +272,77 @@ static void SystemClock_Config(void)
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;  
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2; 
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2; 
-  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2; 
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
   ret = HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4);
   if(ret != HAL_OK)
   {
     Error_Handler();
   }
+#endif
 
+#ifdef BOARD_WAVESHARE
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+
+  /**Supply configuration update enable
+  */
+  MODIFY_REG(PWR->CR3, PWR_CR3_SCUEN, 0);
+  /**Configure the main internal regulator output voltage
+  */
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+  while ((PWR->D3CR & (PWR_D3CR_VOSRDY)) != PWR_D3CR_VOSRDY)
+  {
+
+  }
+  /**Initializes the CPU, AHB and APB busses clocks
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 400;
+  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_1;
+  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
+  RCC_OscInitStruct.PLL.PLLFRACN = 0;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /**Initializes the CPU, AHB and APB busses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
+                              |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /*
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USART1;
+  PeriphClkInitStruct.Usart16ClockSelection = RCC_USART16CLKSOURCE_D2PCLK2;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  */
+#endif
 }
 
 /**
@@ -277,9 +352,8 @@ static void SystemClock_Config(void)
   */
 static void Error_Handler(void)
 {
-  /* Turn LED_RED on */
-  BSP_LED_On(LED_RED);
-
+  /* Turn LED1 on */
+  BSP_LED_On(LED1);
   while(1)
   {
   }  
@@ -295,23 +369,32 @@ static void Error_Handler(void)
 static void MPU_Config(void)
 {
   MPU_Region_InitTypeDef MPU_InitStruct;
-  
+
   /* Disable the MPU */
   HAL_MPU_Disable();
 
   /* Configure the MPU attributes as WT for SRAM */
+  // Gallium - Configures as write-back (See ARM Generic User Guide for details).
+  //           System crashes when configuring 512KB in one regioin.
+  // @todo - May need to memset structure to 0.
+  // @todo - Configures DTCM at 0x20000000 (128KB).
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
-  MPU_InitStruct.BaseAddress = 0x24000000;
-  MPU_InitStruct.Size = MPU_REGION_SIZE_512KB;
+  MPU_InitStruct.BaseAddress = 0x24000000;                      // AXI SRAM (512KB).
+  MPU_InitStruct.Size = MPU_REGION_SIZE_256KB;                  // MPU_REGION_SIZE_512KB causes crash.
   MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
-  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+  MPU_InitStruct.IsBufferable = MPU_ACCESS_BUFFERABLE;          // Write-back. (Was MPU_ACCESS_NOT_BUFFERABLE.)
   MPU_InitStruct.IsCacheable = MPU_ACCESS_CACHEABLE;
-  MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
+  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;        // If enabled, performance is much slower. (Was MPU_ACCESS_SHAREABLE.)
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
-  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1;                 // (Was MPU_TEX_LEVEL0.)
   MPU_InitStruct.SubRegionDisable = 0x00;
   MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE;
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
+  // Gallium - Configures another region with similar attributes for testing.
+  MPU_InitStruct.BaseAddress = 0x24040000;                      // AXI SRAM (512KB).
+  MPU_InitStruct.Size = MPU_REGION_SIZE_128KB;
+  MPU_InitStruct.Number = MPU_REGION_NUMBER1;
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
   /* Enable the MPU */

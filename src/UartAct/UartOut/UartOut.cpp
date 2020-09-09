@@ -87,12 +87,11 @@ void UartOut::CleanCache(uint32_t addr, uint32_t len) {
 }
 
 UartOut::UartOut(Hsmn hsmn, char const *name, UART_HandleTypeDef &hal) :
-    Region((QStateHandler)&UartOut::InitialPseudoState, hsmn, name,
-           timerEvtName, ARRAY_COUNT(timerEvtName),
-           internalEvtName, ARRAY_COUNT(internalEvtName),
-           interfaceEvtName, ARRAY_COUNT(interfaceEvtName)),
-    m_hal(hal), m_client(HSM_UNDEF), m_fifo(NULL), m_writeCount(0),
-    m_activeTimer(this->GetHsm().GetHsmn(), ACTIVE_TIMER) {}
+    Region((QStateHandler)&UartOut::InitialPseudoState, hsmn, name),
+    m_hal(hal), m_manager(HSM_UNDEF), m_client(HSM_UNDEF), m_fifo(NULL), m_writeCount(0),
+    m_activeTimer(this->GetHsm().GetHsmn(), ACTIVE_TIMER) {
+    SET_EVT_NAME(UART_OUT);
+}
 
 QState UartOut::InitialPseudoState(UartOut * const me, QEvt const * const e) {
     (void)e;
@@ -156,9 +155,7 @@ QState UartOut::Stopped(UartOut * const me, QEvt const * const e) {
         case UART_OUT_START_REQ: {
             EVENT(e);
             UartOutStartReq const &req = static_cast<UartOutStartReq const &>(*e);
-            FW::Active *container = me->GetContainer();
-            FW_ASSERT(container);
-            FW_ASSERT(req.GetFrom() == container->GetHsm().GetHsmn());
+            me->m_manager = req.GetFrom();
             me->m_fifo = req.GetFifo();
             FW_ASSERT(me->m_fifo);
             me->m_fifo->Reset();
@@ -224,7 +221,7 @@ QState UartOut::Inactive(UartOut * const me, QEvt const * const e) {
             break;
         }
         case UART_OUT_WRITE_REQ: {
-            //EVENT(e);
+            EVENT(e);
             Evt const &req = EVT_CAST(*e);
             Evt *evt = new ErrorEvt(UART_OUT_WRITE_CFM, req.GetFrom(), GET_HSMN(), req.GetSeq(), ERROR_SUCCESS);
             Fw::Post(evt);
@@ -274,10 +271,7 @@ QState UartOut::Active(UartOut * const me, QEvt const * const e) {
         // Gallium - TODO Add HW_FAIL
         case ACTIVE_TIMER: {
             EVENT(e);
-            // Need FW:: to avoid from being confused with the state Active.
-            FW::Active *container = me->GetContainer();
-            FW_ASSERT(container);
-            Evt *evt = new UartOutFailInd(container->GetHsm().GetHsmn(), GET_HSMN(), GEN_SEQ(), ERROR_TIMEOUT, GET_HSMN());
+            Evt *evt = new UartOutFailInd(me->m_manager, GET_HSMN(), GEN_SEQ(), ERROR_TIMEOUT, GET_HSMN());
             Fw::Post(evt);
             status = Q_TRAN(&UartOut::Failed);
             break;
@@ -303,6 +297,7 @@ QState UartOut::Normal(UartOut * const me, QEvt const * const e) {
                 len = fifo.GetEndAddr() - addr;
             }
             FW_ASSERT((len > 0) && (len <= fifo.GetUsedCount()));
+            // Must enable the following call when write-back policy is used. See MPU_Config() in main.cpp.
             me->m_fifo->CacheOp(UartOut::CleanCache, len);
             HAL_UART_Transmit_DMA(&me->m_hal, (uint8_t*)addr, len);
             me->m_writeCount = len;
@@ -315,7 +310,7 @@ QState UartOut::Normal(UartOut * const me, QEvt const * const e) {
             break;
         }
         case UART_OUT_WRITE_REQ: {
-            //EVENT(e);
+            EVENT(e);
             Evt const &req = EVT_CAST(*e);
             Evt *evt = new ErrorEvt(UART_OUT_WRITE_CFM, req.GetFrom(), GET_HSMN(), req.GetSeq(), ERROR_SUCCESS);
             Fw::Post(evt);
@@ -323,7 +318,7 @@ QState UartOut::Normal(UartOut * const me, QEvt const * const e) {
             break;
         }
         case DMA_DONE: {
-            //EVENT(e);
+            EVENT(e);
             me->m_fifo->IncReadIndex(me->m_writeCount);
             Evt *evt;
             if (me->m_fifo->GetUsedCount()) {
