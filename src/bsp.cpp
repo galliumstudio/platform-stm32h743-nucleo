@@ -83,7 +83,6 @@ static void WriteUart(char const *buf, uint32_t len) {
 void BspInit() {
     // STM32 HAL library initialization
     HAL_Init();
-
 #ifdef ENABLE_BSP_PRINT
     InitUart();
 #endif // ENABLE_BSP_PRINT

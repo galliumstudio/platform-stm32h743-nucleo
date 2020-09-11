@@ -221,7 +221,7 @@ QState UartOut::Inactive(UartOut * const me, QEvt const * const e) {
             break;
         }
         case UART_OUT_WRITE_REQ: {
-            EVENT(e);
+            //EVENT(e);
             Evt const &req = EVT_CAST(*e);
             Evt *evt = new ErrorEvt(UART_OUT_WRITE_CFM, req.GetFrom(), GET_HSMN(), req.GetSeq(), ERROR_SUCCESS);
             Fw::Post(evt);
@@ -310,7 +310,7 @@ QState UartOut::Normal(UartOut * const me, QEvt const * const e) {
             break;
         }
         case UART_OUT_WRITE_REQ: {
-            EVENT(e);
+            //EVENT(e);
             Evt const &req = EVT_CAST(*e);
             Evt *evt = new ErrorEvt(UART_OUT_WRITE_CFM, req.GetFrom(), GET_HSMN(), req.GetSeq(), ERROR_SUCCESS);
             Fw::Post(evt);
@@ -318,7 +318,7 @@ QState UartOut::Normal(UartOut * const me, QEvt const * const e) {
             break;
         }
         case DMA_DONE: {
-            EVENT(e);
+            //EVENT(e);
             me->m_fifo->IncReadIndex(me->m_writeCount);
             Evt *evt;
             if (me->m_fifo->GetUsedCount()) {
