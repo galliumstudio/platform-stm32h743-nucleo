@@ -66,14 +66,14 @@ public:
         ADDR_PIN_MASK   = (GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3),
         RGB_PIN_MASK    = (GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5),
         LINE_CNT        = 16,                       // No. of lines in a single scan set.
-        BIT_CNT         = 7,                        // No. of bits per color (e.g. 6 for 18-bit color).
+        BIT_CNT         = 6, // 7                       // No. of bits per color (e.g. 6 for 18-bit color).
         TIM_BASE_FREQ   = 100000000,                // Used by clk gate timer and slot timer.
         TIM_BASE_FREQ_H = (TIM_BASE_FREQ * 2),      // Used by clk pwm timer (for more clk freq choices).
         CLK_FREQ        = 18181818,                 // Other values tried: 33333333, 14285714, 25000000, 20000000, 16666666
                                                     // DMA FIFO error (FE) starts to occur at CLK freq > 14400000.
                                                     // Data shift starts showing up at CLK freq > 18000000 with UART traffic.
         CLK_CNT         = 128,                      // Clock cycles per line.
-        FRAME_RATE      = 60,                       // Frame refresh rate in Hz.
+        FRAME_RATE      = 97, //60,                       // Frame refresh rate in Hz.
         SLOT_FREQ       = (FRAME_RATE * LINE_CNT * (1 << BIT_CNT)),     // frame rate * 16 scan lines * 64 levels per color (6 bits).
                                                                         // Some typical values: 122880, 61440, 102400, 81920, 92160
         FRAME_PER_SYNC  = 2,                        // No. of frames per sync event.
@@ -129,13 +129,13 @@ protected:
         EVT_LAST_SLOT,      // Short-circuited (shown in statechart).
         EVT_RETRY_SLOT,     // Short-circuited (shown in statechart).
     };
-    // States used in the slot timer ISR.
+    // States used in the slot timer ISR (We follow naming convention for states in statechart).
     enum SlotState {
-        STATE_INIT_SLOT,    // Initial state for synchronization.
-        STATE_FIRST_SLOT,   // First slot allocated for the current color bit.
-        STATE_MID_SLOT,     // One of the middle slots alloated for the current color bit. (Does not apply if slot cnt <= 2.)
-        STATE_LAST_SLOT,    // Last slot allocated for the current color bit.
-        STATE_RETRY_SLOT,   // Slot while retry of DMA is to be initialiated
+        InitSlot,    // Initial state for synchronization.
+        FirstSlot,   // First slot allocated for the current color bit.
+        MidSlot,     // One of the middle slots alloated for the current color bit. (Does not apply if slot cnt <= 2.)
+        LastSlot,    // Last slot allocated for the current color bit.
+        RetrySlot,   // Slot while retry of DMA is to be initialiated
     };
 
     void SlotTimIntHandler(SlotEvt evt);

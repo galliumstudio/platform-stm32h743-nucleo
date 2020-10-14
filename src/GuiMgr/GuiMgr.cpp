@@ -79,6 +79,8 @@ extern "C" const GUI_BITMAP bmb_0005;
 extern "C" const GUI_BITMAP bmb_0006;
 extern "C" const GUI_BITMAP bmb_0007;
 extern "C" const GUI_BITMAP bmb_0008;
+extern "C" const GUI_BITMAP bmColordots;
+extern "C" const GUI_BITMAP bmLedpanel6;
 
 static const GUI_BITMAP *guiBitmap[] =
 {
@@ -91,6 +93,8 @@ static const GUI_BITMAP *guiBitmap[] =
     &bmb_0006,
     &bmb_0007,
     &bmb_0008,
+    &bmColordots,
+    &bmLedpanel6,
 };
 
 const GuiMgr::TimeoutMap GuiMgr::m_ticker1Timeout[] = {
@@ -132,7 +136,7 @@ const GuiMgr::TimeoutMap GuiMgr::m_bmpTimeout[] = {
     { 3,  80   },
     { 2,  120  },
     { 1,  160  },
-    { 0,  1500 }
+    { 0,  5000 }
 };
 
 // Helper function to map offset to timeout for speed control.

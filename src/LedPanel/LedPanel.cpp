@@ -40,9 +40,9 @@
 #include "fw_log.h"
 #include "fw_assert.h"
 #include "LedPanelInterface.h"
-#include "LedPanel.h"
 #include "LedDmaBuf.h"
 #include "fw.h"
+#include "LedPanel.h"
 
 FW_DEFINE_THIS_FILE("LedPanel.cpp")
 
@@ -103,15 +103,20 @@ static void IncCurrHsmn() {
 //const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 2, 5, 4, 5, 3, 5, 4, 5 };
 //const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 8, 8, 8, 8, 8, 8, 8 };
 
-//const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 5, 4, 5, 3, 5, 4, 5, 2, 5, 4, 5, 3, 5, 4, 5 };
-//const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 5, 4, 5, 3, 5, 4, 5, 2, 5, 4, 5, 3, 5, 4, 5 };
+const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
 
 // 7-bit color.
 //const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 2, 6, 5, 6, 4, 6, 5, 6, 3, 6, 5, 6, 4, 6, 5, 6 };
 //const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
 
-const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 6, 5, 6, 4, 6, 5, 6, 3, 6, 5, 6, 4, 6, 5, 6, 2, 6, 5, 6, 4, 6, 5, 6, 3, 6, 5, 6, 4, 6, 5, 6 };
-const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+//const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 6, 5, 6, 4, 6, 5, 6, 3, 6, 5, 6, 4, 6, 5, 6, 2, 6, 5, 6, 4, 6, 5, 6, 3, 6, 5, 6, 4, 6, 5, 6 };
+//const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+
+// 8-bit color.
+//const uint32_t LedPanel::BIT_IDX[] =  { 0, 1, 7, 6, 7, 5, 7, 6, 7, 4, 7, 6, 7, 5, 7, 6, 7, 3, 7, 6, 7, 5, 7, 6, 7, 4, 7, 6, 7, 5, 7, 6, 7, 2, 7, 6, 7, 5, 7, 6, 7, 4, 7, 6, 7, 5, 7, 6, 7, 3, 7, 6, 7, 5, 7, 6, 7, 4, 7, 6, 7, 5, 7, 6, 7 };
+//const uint32_t LedPanel::SLOT_CNT[] = { 1, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7 };
+
 
 const uint32_t LedPanel::SUB_BIT_CNT = ARRAY_COUNT(LedPanel::BIT_IDX);
 FW_STATIC_ASSERT(ARRAY_COUNT(LedPanel::BIT_IDX) == ARRAY_COUNT(LedPanel::SLOT_CNT));
@@ -145,7 +150,7 @@ void LedPanel::SlotTimIntHandler(SlotEvt evt) {
     SlotEvt nextEvt = EVT_UNDEF;
     while (evt != EVT_UNDEF) {
         if (evt == EVT_SLOT_INT) {
-            if (m_slotState == STATE_FIRST_SLOT) {
+            if (m_slotState == FirstSlot) {
                 // Test code to detect DMA error.
                 /*
                 if (__HAL_DMA_GET_FLAG(&m_clkDma, __HAL_DMA_GET_FE_FLAG_INDEX(&m_clkDma))) {
@@ -162,7 +167,7 @@ void LedPanel::SlotTimIntHandler(SlotEvt evt) {
                     // DMA incomplete.
                     m_testPin.Set();
                     s_retryInst = GetInst();
-                    m_slotState = STATE_RETRY_SLOT;
+                    m_slotState = RetrySlot;
                     m_testPin.Clear();
                 } else {
                     m_addrPins.Write(m_lineIdx << m_config->addrShift);
@@ -171,15 +176,15 @@ void LedPanel::SlotTimIntHandler(SlotEvt evt) {
                     s_retryInst = INSTANCE_UNDEF;
                     ++m_slotIdx;
                     if (m_slotIdx < (m_slotCnt - 1)) {
-                        m_slotState = STATE_MID_SLOT;
+                        m_slotState = MidSlot;
                     } else if (m_slotIdx == (m_slotCnt - 1)) {
-                        m_slotState = STATE_LAST_SLOT;
+                        m_slotState = LastSlot;
                     } else {
-                        m_slotState = STATE_LAST_SLOT;
+                        m_slotState = LastSlot;
                         nextEvt = EVT_SLOT_INT;
                     }
                 }
-            } else if (m_slotState == STATE_LAST_SLOT) {
+            } else if (m_slotState == LastSlot) {
                 bool sendCfm = false;
                 bool sendSync = false;
                 if (++m_lineIdx == LINE_CNT) {
@@ -211,12 +216,12 @@ void LedPanel::SlotTimIntHandler(SlotEvt evt) {
                     Evt *evt = new LedPanelSyncInd(GUI_MGR, GetHsmn(), GenSeq());
                     Fw::Post(evt);
                 }
-                m_slotState = STATE_FIRST_SLOT;
-            } else if (m_slotState == STATE_MID_SLOT) {
+                m_slotState = FirstSlot;
+            } else if (m_slotState == MidSlot) {
                 if (++m_slotIdx == (m_slotCnt - 1)) {
-                    m_slotState = STATE_LAST_SLOT;
+                    m_slotState = LastSlot;
                 }
-            } else if (m_slotState == STATE_RETRY_SLOT) {
+            } else if (m_slotState == RetrySlot) {
                 if (m_config->clkDmaStream->CR & DMA_SxCR_EN) {
                     // DMA still incomplete. Restart DMA.
                     StopDma();
@@ -224,14 +229,14 @@ void LedPanel::SlotTimIntHandler(SlotEvt evt) {
                     uint32_t cnt;
                     uint16_t const *buf = m_currDmaBuf->GetBuf(m_bitIdx, m_lineIdx, cnt);
                     StartDma(buf, cnt);
-                    m_slotState = STATE_FIRST_SLOT;
+                    m_slotState = FirstSlot;
                 } else {
-                    m_slotState = STATE_FIRST_SLOT;
+                    m_slotState = FirstSlot;
                     nextEvt = EVT_SLOT_INT;
                 }
-            } else if (m_slotState == STATE_INIT_SLOT) {
+            } else if (m_slotState == InitSlot) {
                 if (m_waitCnt == 0) {
-                    m_slotState = STATE_LAST_SLOT;
+                    m_slotState = LastSlot;
                 } else {
                     m_waitCnt--;
                 }
@@ -646,7 +651,7 @@ void LedPanel::StopSlotTim()
 
 LedPanel::LedPanel() :
     Active((QStateHandler)&LedPanel::InitialPseudoState, GetCurrHsmn(), GetName(GetCurrHsmn())),
-    m_brightness(30), m_waitCnt(0), m_slotIdx(0), m_subBitIdx(0), m_bitIdx(0), m_lineIdx(0), m_slotCnt(0), m_frameCnt(0), m_slotState(STATE_MID_SLOT),
+    m_brightness(60), m_waitCnt(0), m_slotIdx(0), m_subBitIdx(0), m_bitIdx(0), m_lineIdx(0), m_slotCnt(0), m_frameCnt(0), m_slotState(MidSlot),
     m_currDmaBuf(NULL), m_newDmaBuf(NULL), m_stateTimer(GetHsm().GetHsmn(), STATE_TIMER) {
     SET_EVT_NAME(LED_PANEL);
     IncCurrHsmn();
@@ -832,7 +837,7 @@ QState LedPanel::Started(LedPanel * const me, QEvt const * const e) {
             }
             me->m_lineIdx = LINE_CNT - 1;
             me->m_frameCnt = 0;
-            me->m_slotState = STATE_INIT_SLOT;
+            me->m_slotState = InitSlot;
 
             // SaveObj must be called after the above initialization.
             me->SaveObj();
