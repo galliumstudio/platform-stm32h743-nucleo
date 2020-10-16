@@ -44,6 +44,7 @@
 #include "fw_timer.h"
 #include "fw_array.h"
 #include "fw_evt.h"
+#include "fw_pipe.h"
 #include "app_hsmn.h"
 #include "Pin.h"
 
@@ -56,6 +57,9 @@ using namespace FW;
 // Disable it to use a separate gate time to control no. of clk cycles.
 #define USE_SINGLE_PULSE_MODE
 
+// Enable this macro to sub-bit support to reduce flickering.
+#define USE_SUB_BIT
+
 namespace APP {
 
 class LedDmaBuf;
@@ -66,14 +70,14 @@ public:
         ADDR_PIN_MASK   = (GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3),
         RGB_PIN_MASK    = (GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5),
         LINE_CNT        = 16,                       // No. of lines in a single scan set.
-        BIT_CNT         = 6, // 7                       // No. of bits per color (e.g. 6 for 18-bit color).
+        BIT_CNT         = 7, //6,                       // No. of bits per color (e.g. 6 for 18-bit color).
         TIM_BASE_FREQ   = 100000000,                // Used by clk gate timer and slot timer.
         TIM_BASE_FREQ_H = (TIM_BASE_FREQ * 2),      // Used by clk pwm timer (for more clk freq choices).
         CLK_FREQ        = 18181818,                 // Other values tried: 33333333, 14285714, 25000000, 20000000, 16666666
                                                     // DMA FIFO error (FE) starts to occur at CLK freq > 14400000.
                                                     // Data shift starts showing up at CLK freq > 18000000 with UART traffic.
         CLK_CNT         = 128,                      // Clock cycles per line.
-        FRAME_RATE      = 97, //60,                       // Frame refresh rate in Hz.
+        FRAME_RATE      = 56, // 97, //60,                       // Frame refresh rate in Hz.
         SLOT_FREQ       = (FRAME_RATE * LINE_CNT * (1 << BIT_CNT)),     // frame rate * 16 scan lines * 64 levels per color (6 bits).
                                                                         // Some typical values: 122880, 61440, 102400, 81920, 92160
         FRAME_PER_SYNC  = 2,                        // No. of frames per sync event.
@@ -137,6 +141,21 @@ protected:
         LastSlot,    // Last slot allocated for the current color bit.
         RetrySlot,   // Slot while retry of DMA is to be initialiated
     };
+    // Internal event queue and helpers for slot interrupt handler.
+    enum {
+        SLOT_EVT_QUEUE_ORDER = 2
+    };
+    Pipe<SlotEvt> m_slotEvtQueue;
+    SlotEvt m_slotEvtQueueStor[1<<SLOT_EVT_QUEUE_ORDER];
+    void raiseSlotEvt(SlotEvt const &e) { m_slotEvtQueue.WriteNoCrit(e); }
+    bool getSlotEvt(SlotEvt &e) { return m_slotEvtQueue.ReadNoCrit(e); }
+    // State checking helper functions.
+    bool InInitSlot() { return m_slotState == InitSlot; }
+    bool InFirstSlot() { return m_slotState == FirstSlot; }
+    bool InMidSlot() { return m_slotState == MidSlot; }
+    bool InLastSlot() { return m_slotState == LastSlot; }
+    bool InRetrySlot() { return m_slotState == RetrySlot; }
+    bool InStarted() { return true; }   // It is the parent state of all possible states in SlotTimIntHandler.
 
     void SlotTimIntHandler(SlotEvt evt);
     void SaveObj();
@@ -194,6 +213,7 @@ protected:
     void DeInitSlotTim();
     void StartSlotTim();
     void StopSlotTim();
+#ifdef USE_SUB_BIT
     void UpdateBitIdx() {
         if (IsPrimary()) { m_subBitIdx = (m_subBitIdx + 1) % SUB_BIT_CNT; }
         else  { m_subBitIdx = m_subBitIdx ? m_subBitIdx - 1 : (SUB_BIT_CNT - 1); }
@@ -204,6 +224,15 @@ protected:
         LEDPANEL_ASSERT(m_subBitIdx < SUB_BIT_CNT);
         m_slotCnt = SLOT_CNT[m_subBitIdx];
     }
+#else
+    void UpdateBitIdx() {
+        if (IsPrimary()) { m_bitIdx = (m_bitIdx + 1) % BIT_CNT; }
+        else  { m_bitIdx = m_bitIdx ? m_bitIdx - 1 : (BIT_CNT - 1); }
+    }
+    void UpdateSlotCnt() {
+        m_slotCnt = 1 << m_bitIdx;
+    }
+#endif
 
     class Config {
     public:
